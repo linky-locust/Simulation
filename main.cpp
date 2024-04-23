@@ -6,8 +6,8 @@ using namespace std;
 
 const int claimingMethod;
 const int numOfNode = 256; // 設定有幾個node
-const double downlinkedProbability;
-const double uplinkedProbability;
+const double downlinkedProbability=0.1;
+const double uplinkedProbability=0.1;
 
 const int numOfDTIM;
 const int numOfTIMEachDTIM;
