@@ -9,31 +9,45 @@ const int numOfNode = 256; // 設定有幾個node
 const double downlinkedProbability=0.1;
 const double uplinkedProbability=0.1;
 
-const int numOfDTIM;
-const int numOfTIMEachDTIM;
-const int numOfRAWEachTIM;
-const int numOfSlotEachRAW;
+const int numOfDTIM = 4;
+const int numOfTIMEachDTIM = 4;
+const int numOfRAWEachTIM = 4;
+const int numOfSlotEachRAW = 4;
+const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+const double DTIMDuration = 5.12; // 秒(s)
+const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 int totalPayloadSize = 0;
 int uplinkedTimeStamp = 1;
 int downlinkedTimeStamp = 1;
-int numberOfDownlinkedDataEachNode[numOfNode];
-int numberOfClaimedUplinkedDataEachNode[numOfNode];
+int numOfDownlinkedDataEachNode[numOfNode];
+int numOfClaimedUplinkedDataEachNode[numOfNode];
 int downlinkedDataTimeStamp[numOfNode];
 int uplinkedDataTimeStamp[numOfNode];
+
+vector<Node> nodes;
 
 void initialize() {
     for(int i = 0; i < numOfNode; i++) {
         downlinkedDataTimeStamp[i] = 0;
         uplinkedDataTimeStamp[i] = 0;
-        numberOfDownlinkedDataEachNode[i] = 0;
-        numberOfClaimedUplinkedDataEachNode[i] = 0;
+        numOfDownlinkedDataEachNode[i] = 0;
+        numOfClaimedUplinkedDataEachNode[i] = 0;
     }
 }
 
-void recordTimeStamp(int aid) {
-    uplinkedDataTimeStamp[aid] = uplinkedTimeStamp;
-    uplinkedTimeStamp++;
+void recordTimeStamp(int start) {
+    for(int i = start; i < start + numOfSTAEachSlot - 1; i++) {
+        if(nodes[i].isTransmitting()) {
+            uplinkedDataTimeStamp[i] = uplinkedTimeStamp;
+            // 這邊同時記錄成功claim的STA有幾個uplinked data frame
+            numOfClaimedUplinkedDataEachNode[i] = nodes[i].getNumOfUplinkedData();
+
+            uplinkedTimeStamp++;
+            return;
+        }
+    }
 }
 
 void clearUplinkedDataTimeStamp(int aid) {
@@ -53,14 +67,14 @@ void generateDownlinkedData() {
         x = rand() % (max - min + 1) + min;
         if(x < downlinkedProbability) {
             downlinkedDataTimeStamp[i] = downlinkedTimeStamp;
-            numberOfDownlinkedDataEachNode[i]++;
+            numOfDownlinkedDataEachNode[i]++;
             downlinkedTimeStamp++;
         }
 
         for(int j = 0; j < 2; j++) {
             x = rand() % (max - min + 1) + min;
             if(x < downlinkedProbability)
-                numberOfDownlinkedDataEachNode[i]++;
+                numOfDownlinkedDataEachNode[i]++;
         }
     }
 }
@@ -69,7 +83,63 @@ double calculateThroughput() {
     // TODO
 }
 
+void generateNewBackoffCounter(int start) {
+    for(int i = start; i < start + numOfSTAEachSlot - 1; i++) {
+        if(nodes[i].isTransmitting())
+            nodes[i].generateBackoffCounter();
+    }
+}
+
+void backoffCounterCountDown(int start) {
+    for(int i = start; i < start + numOfSTAEachSlot - 1; i++)
+        nodes[i].backoffCountDown();
+}
+
 
 int main(){
+    // Create nodes
+    for(int i = 0; i < numOfNode; i++) {
+        Node node(i, uplinkedProbability);
+        nodes.push_back(node);
+    }
 
+    // Generate backoff counter
+    for(int i = 0; i < numOfNode; i++) {
+        nodes[i].generateBackoffCounter();
+    }
+
+    int startAID = 0;
+
+    for(int i = 0; i < numOfDTIM; i++) {
+        for(int j = 0; j < numOfTIMEachDTIM; j++) {
+            for(int k = 0; k < numOfRAWEachTIM; k++) {
+                //Claiming Phase
+                for(int l = 0; l < numOfSlotEachRAW; l++) {
+                    // CW equals 32
+                    for(int m = 0; m < 32; m++) {
+                        bool mightCollision = false, collision = false;
+                        //Check is there any STA whose backoff counter equals 0
+                        for(int temp = startAID; temp < startAID + numOfSTAEachSlot - 1; temp++) {
+                            if(nodes[temp].isTransmitting()) {
+                                if(mightCollision){ // 發生碰撞
+                                    collision = true;
+                                    break;
+                                } else
+                                    mightCollision =true;
+                            }
+                        }
+
+                        if(!mightCollision) // 如果沒有STA要發起傳輸
+                            backoffCounterCountDown();
+                        else {
+                            if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                                generateNewBackoffCounter(startAID);
+                            else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                                recordTimeStamp(startAID);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

@@ -20,8 +20,8 @@ private:
     int payloadSize = 128 * 8;  // 假設payload size為128bytes，轉換為位元
 
 public:
-    Node(int num, int probability) {
-        aid = num;
+    Node(int id, int probability) {
+        aid = id;
         uplinkedProbability = probability;
     }
 
@@ -60,6 +60,10 @@ public:
 
     int getBackoffCounter() {
         return backoffCounter;
+    }
+
+    int getAID() {
+        return aid;
     }
 
     bool isTransmitting() {
