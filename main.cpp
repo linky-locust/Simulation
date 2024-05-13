@@ -6,8 +6,8 @@ using namespace std;
 
 const int claimingMethod;
 const int numOfNode = 256; // 設定有幾個node
-const double downlinkedProbability=0.1;
-const double uplinkedProbability=0.1;
+const double downlinkedProbability = 0.1;
+const double uplinkedProbability = 0.3;
 
 const int numOfDTIM = 4;
 const int numOfTIMEachDTIM = 4;
@@ -66,7 +66,8 @@ void generateDownlinkedData() {
     for(int i = 0; i < numOfNode; i++) {
         x = rand() % (max - min + 1) + min;
         if(x < downlinkedProbability) {
-            downlinkedDataTimeStamp[i] = downlinkedTimeStamp;
+            if(downlinkedDataTimeStamp[i] == 0)
+                downlinkedDataTimeStamp[i] = downlinkedTimeStamp;
             numOfDownlinkedDataEachNode[i]++;
             downlinkedTimeStamp++;
         }
@@ -123,6 +124,8 @@ void claimingPhase(int startAID) {
 
 
 int main(){
+    initialize();
+
     // Create nodes
     for(int i = 0; i < numOfNode; i++) {
         Node node(i, uplinkedProbability);
@@ -134,12 +137,12 @@ int main(){
     int startAID = 0;
 
     for(int i = 0; i < numOfDTIM; i++) {
+        generateDownlinkedData();
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
                 for(int l = 0; l < numOfSlotEachRAW; l++) {
-                    //Claiming Phase
+                    // Claiming Phase
                     claimingPhase(startAID);
-
                 }
             }
         }
