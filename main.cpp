@@ -97,28 +97,32 @@ void backoffCounterCountDown(int start) {
 }
 
 void claimingPhase(int startAID) {
-    // CW equals 32
-    for(int i = 0; i < 32; i++) {
-        bool mightCollision = false, collision = false;
-        //Check is there any STA whose backoff counter equals 0
-        for(int j = startAID; j < startAID + numOfSTAEachSlot - 1; j++) {
-            if(nodes[j].isTransmitting()) {
-                if(mightCollision){ // 發生碰撞
-                    collision = true;
-                    break;
-                } else
-                    mightCollision =true;
+    for(int i = 0; i < numOfSlotEachRAW; i++) {
+        // CW equals 32
+        for(int j = 0; j < 32; j++) {
+            bool mightCollision = false, collision = false;
+            //Check is there any STA whose backoff counter equals 0
+            for(int k = startAID; k < startAID + numOfSTAEachSlot - 1; k++) {
+                if(nodes[k].isTransmitting()) {
+                    if(mightCollision){ // 發生碰撞
+                        collision = true;
+                        break;
+                    } else
+                        mightCollision =true;
+                }
+            }
+
+            if(!mightCollision) // 如果沒有STA要發起傳輸
+                backoffCounterCountDown(startAID);
+            else {
+                if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                    generateNewBackoffCounter(startAID);
+                else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                    recordTimeStamp(startAID);
             }
         }
 
-        if(!mightCollision) // 如果沒有STA要發起傳輸
-            backoffCounterCountDown(startAID);
-        else {
-            if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
-                generateNewBackoffCounter(startAID);
-            else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
-                recordTimeStamp(startAID);
-        }
+        startAID += numOfSTAEachSlot;
     }
 }
 
@@ -140,10 +144,12 @@ int main(){
         generateDownlinkedData();
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
-                for(int l = 0; l < numOfSlotEachRAW; l++) {
-                    // Claiming Phase
-                    claimingPhase(startAID);
-                }
+                // Claiming Phase
+                claimingPhase(startAID);
+
+                //Slot Adjustment Phase
+
+                startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
             }
         }
     }
