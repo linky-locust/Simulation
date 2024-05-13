@@ -8,6 +8,7 @@ const int claimingMethod;
 const int numOfNode = 256; // 設定有幾個node
 const double downlinkedProbability = 0.1;
 const double uplinkedProbability = 0.3;
+const int dataSize = 128; // bytes
 
 const int numOfDTIM = 4;
 const int numOfTIMEachDTIM = 4;
@@ -15,8 +16,17 @@ const int numOfRAWEachTIM = 4;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
-const double DTIMDuration = 5.12; // 秒(s)
+const double DTIMDuration = 5.12; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+int slots[numOfSlotEachRAW] = {slotDuration};
+double tScheduled[numOfSlotEachRAW] = {0};
+double tRemaining[numOfSlotEachRAW] = {0};
+bool isCollision[numOfSlotEachRAW] = {false};
+vector<int> surplusSlots;
+vector<int> deficitSlots;
+set<int> claimed;
+int numOfClaimedSTA[numOfSlotEachRAW] = {0};
 
 int totalPayloadSize = 0;
 int uplinkedTimeStamp = 1;
@@ -43,8 +53,9 @@ void recordTimeStamp(int start) {
             uplinkedDataTimeStamp[i] = uplinkedTimeStamp;
             // 這邊同時記錄成功claim的STA有幾個uplinked data frame
             numOfClaimedUplinkedDataEachNode[i] = nodes[i].getNumOfUplinkedData();
-
+            claimed.insert(i);
             uplinkedTimeStamp++;
+
             return;
         }
     }
@@ -103,26 +114,81 @@ void claimingPhase(int startAID) {
             bool mightCollision = false, collision = false;
             //Check is there any STA whose backoff counter equals 0
             for(int k = startAID; k < startAID + numOfSTAEachSlot - 1; k++) {
-                if(nodes[k].isTransmitting()) {
+                if(nodes[k].isTransmitting() && !claimed.count(i)) {
                     if(mightCollision){ // 發生碰撞
                         collision = true;
                         break;
                     } else
-                        mightCollision =true;
+                        mightCollision = true;
                 }
             }
 
             if(!mightCollision) // 如果沒有STA要發起傳輸
                 backoffCounterCountDown(startAID);
             else {
-                if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                if(collision) {//如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
-                else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                    isCollision[i] = true;
+                } else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(startAID);
+                    numOfClaimedSTA[i]++;
+                }
             }
         }
 
         startAID += numOfSTAEachSlot;
+    }
+}
+
+void calculateTScheduled(int startAID) {
+    for(int i = 0; i < numOfSlotEachRAW; i++) {
+        double numOfData = 0;
+        for(int i = startAID; i < startAID + numOfSTAEachSlot - 1; i++) {
+            if(numOfClaimedUplinkedDataEachNode[i])
+                numOfData += numOfClaimedUplinkedDataEachNode[i];
+
+            if(numOfDownlinkedDataEachNode[i])
+                numOfData += numOfDownlinkedDataEachNode[i];
+        }
+        tScheduled[i] = (numOfData * dataSize) / 150000;
+        startAID += numOfSTAEachSlot;
+    }
+}
+
+void calculateTRemaining() {
+    for(int i = 0; i < numOfSlotEachRAW; i++) 
+        tRemaining[i] = slotDuration - tScheduled[i];
+}
+
+bool descending(int a, int b) {
+    return tRemaining[a] > tRemaining[b];  // 降序排序
+}
+
+bool ascending(int a, int b) {
+    return tRemaining[a] < tRemaining[b];  // 升序排序
+}
+
+void slotAdjustmentPhase(int startAID) {
+    calculateTScheduled(startAID);
+    calculateTRemaining();
+    for(int i = 0; i < numOfSlotEachRAW; i++) {
+        if(tRemaining[i] < 0)
+            deficitSlots.push_back(i);
+        else if(tRemaining[i] > 0 && (!isCollision[i] || (numOfClaimedSTA[i] == numOfSTAEachSlot)))
+            surplusSlots.push_back(i);
+    }
+
+    sort(deficitSlots.begin(), deficitSlots.end(), ascending);
+    sort(surplusSlots.begin(), surplusSlots.end(), descending);
+}
+
+void reset() {
+    for(int i = 0; i < numOfSlotEachRAW; i++) {
+        slots[i] = slotDuration;
+        tScheduled[i] = 0;
+        tRemaining[i] = 0;
+        isCollision[i] = false;
+        numOfClaimedSTA[i] = 0;
     }
 }
 
@@ -144,10 +210,8 @@ int main(){
         generateDownlinkedData();
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
-                // Claiming Phase
                 claimingPhase(startAID);
-
-                //Slot Adjustment Phase
+                slotAdjustmentPhase(startAID);
 
                 startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
             }
