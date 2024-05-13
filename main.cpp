@@ -95,6 +95,32 @@ void backoffCounterCountDown(int start) {
         nodes[i].backoffCountDown();
 }
 
+void claimingPhase(int startAID) {
+    // CW equals 32
+    for(int i = 0; i < 32; i++) {
+        bool mightCollision = false, collision = false;
+        //Check is there any STA whose backoff counter equals 0
+        for(int j = startAID; j < startAID + numOfSTAEachSlot - 1; j++) {
+            if(nodes[j].isTransmitting()) {
+                if(mightCollision){ // 發生碰撞
+                    collision = true;
+                    break;
+                } else
+                    mightCollision =true;
+            }
+        }
+
+        if(!mightCollision) // 如果沒有STA要發起傳輸
+            backoffCounterCountDown(startAID);
+        else {
+            if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                generateNewBackoffCounter(startAID);
+            else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                recordTimeStamp(startAID);
+        }
+    }
+}
+
 
 int main(){
     // Create nodes
@@ -113,31 +139,10 @@ int main(){
     for(int i = 0; i < numOfDTIM; i++) {
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
-                //Claiming Phase
                 for(int l = 0; l < numOfSlotEachRAW; l++) {
-                    // CW equals 32
-                    for(int m = 0; m < 32; m++) {
-                        bool mightCollision = false, collision = false;
-                        //Check is there any STA whose backoff counter equals 0
-                        for(int temp = startAID; temp < startAID + numOfSTAEachSlot - 1; temp++) {
-                            if(nodes[temp].isTransmitting()) {
-                                if(mightCollision){ // 發生碰撞
-                                    collision = true;
-                                    break;
-                                } else
-                                    mightCollision =true;
-                            }
-                        }
-
-                        if(!mightCollision) // 如果沒有STA要發起傳輸
-                            backoffCounterCountDown();
-                        else {
-                            if(collision) //如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
-                                generateNewBackoffCounter(startAID);
-                            else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
-                                recordTimeStamp(startAID);
-                        }
-                    }
+                    //Claiming Phase
+                    claimingPhase(startAID);
+                    
                 }
             }
         }
