@@ -126,12 +126,9 @@ int main(){
     // Create nodes
     for(int i = 0; i < numOfNode; i++) {
         Node node(i, uplinkedProbability);
+        node.generateBackoffCounter();
+        node.generateUplinkedData();
         nodes.push_back(node);
-    }
-
-    // Generate backoff counter
-    for(int i = 0; i < numOfNode; i++) {
-        nodes[i].generateBackoffCounter();
     }
 
     int startAID = 0;
@@ -142,7 +139,7 @@ int main(){
                 for(int l = 0; l < numOfSlotEachRAW; l++) {
                     //Claiming Phase
                     claimingPhase(startAID);
-                    
+
                 }
             }
         }
