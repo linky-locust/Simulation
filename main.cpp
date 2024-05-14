@@ -19,10 +19,10 @@ const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / nu
 const double DTIMDuration = 5.12; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
-int slots[numOfSlotEachRAW] = {slotDuration};
+double slots[numOfSlotEachRAW] = {slotDuration};
 double tScheduled[numOfSlotEachRAW] = {0};
 double tRemaining[numOfSlotEachRAW] = {0};
-bool isCollision[numOfSlotEachRAW] = {false};
+bool haveCollision[numOfSlotEachRAW] = {false};
 vector<int> surplusSlots;
 vector<int> deficitSlots;
 set<int> claimed;
@@ -126,9 +126,9 @@ void claimingPhase(int startAID) {
             if(!mightCollision) // 如果沒有STA要發起傳輸
                 backoffCounterCountDown(startAID);
             else {
-                if(collision) {//如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                if(collision) {//　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
-                    isCollision[i] = true;
+                    haveCollision[i] = true;
                 } else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(startAID);
                     numOfClaimedSTA[i]++;
@@ -160,6 +160,62 @@ void calculateTRemaining() {
         tRemaining[i] = slotDuration - tScheduled[i];
 }
 
+void slotAdjustmentAlgo() {
+    // Algo 1
+    int id = 0, is = 0;
+    while(id < deficitSlots.size() && is < surplusSlots.size()) {
+        if(abs(tRemaining[deficitSlots[id]]) <= tRemaining[surplusSlots[is]]) {
+            slots[deficitSlots[id]] += abs(tRemaining[deficitSlots[id]]);
+            slots[surplusSlots[is]] -= abs(tRemaining[deficitSlots[id]]);
+            tRemaining[surplusSlots[is]] -= abs(tRemaining[deficitSlots[id]]);
+            tRemaining[deficitSlots[id]] = 0;
+            id++;
+        } else {
+            slots[deficitSlots[id]] += tRemaining[surplusSlots[is]];
+            slots[surplusSlots[is]] -= tRemaining[surplusSlots[is]];
+            tRemaining[deficitSlots[id]] += tRemaining[surplusSlots[is]];
+            tRemaining[surplusSlots[is]] = 0;
+            is++;
+        }
+    }
+
+    // 如果Algo 1結束，surplus time還有剩，則平分給同時是D-slots且有unscheduled STAs的slot
+    if(is < surplusSlots.size() - 1) {
+        int counter = 0;
+        double remainingSurplusTime = 0;
+        vector<int> valid;
+        for(int i = 0; i < deficitSlots.size(); i++) {
+            if(haveCollision[deficitSlots[i]] && (numOfClaimedSTA[deficitSlots[i]] < numOfSTAEachSlot)) {
+                valid.push_back(deficitSlots[i]);
+                counter++;
+            }
+        }
+
+        for(int i = is; i < surplusSlots.size(); i++)
+            remainingSurplusTime += tRemaining[surplusSlots[i]];
+
+        double temp = remainingSurplusTime / counter;
+
+        double temp2 = temp;
+
+        while(is < surplusSlots.size() && temp > 0) {
+            if(tRemaining[surplusSlots[is]] >= temp2) {
+                slots[surplusSlots[is]] -= temp2;
+                tRemaining[surplusSlots[is]] -= temp2;
+                temp2 = temp;
+            } else {
+                slots[surplusSlots[is]] -= tRemaining[surplusSlots[is]];
+                temp2 -= tRemaining[surplusSlots[is]];
+                tRemaining[surplusSlots[is]] = 0;
+                is++;
+            }
+        }
+
+        for(int i = 0; i < valid.size(); i++)
+            slots[valid[i]] += temp;
+    }
+}
+
 bool descending(int a, int b) {
     return tRemaining[a] > tRemaining[b];  // 降序排序
 }
@@ -174,12 +230,14 @@ void slotAdjustmentPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         if(tRemaining[i] < 0)
             deficitSlots.push_back(i);
-        else if(tRemaining[i] > 0 && (!isCollision[i] || (numOfClaimedSTA[i] == numOfSTAEachSlot)))
+        else if(tRemaining[i] > 0 && (!haveCollision[i] || (numOfClaimedSTA[i] == numOfSTAEachSlot)))
             surplusSlots.push_back(i);
     }
 
     sort(deficitSlots.begin(), deficitSlots.end(), ascending);
     sort(surplusSlots.begin(), surplusSlots.end(), descending);
+
+    slotAdjustmentAlgo();
 }
 
 void reset() {
@@ -187,7 +245,7 @@ void reset() {
         slots[i] = slotDuration;
         tScheduled[i] = 0;
         tRemaining[i] = 0;
-        isCollision[i] = false;
+        haveCollision[i] = false;
         numOfClaimedSTA[i] = 0;
     }
 }
