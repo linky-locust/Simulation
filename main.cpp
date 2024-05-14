@@ -9,6 +9,7 @@ const int numOfNode = 256; // 設定有幾個node
 const double downlinkedProbability = 0.1;
 const double uplinkedProbability = 0.3;
 const int dataSize = 128; // bytes
+const double transTimePerDataFrame = (dataSize * 8) / 150000;
 
 const int numOfDTIM = 4;
 const int numOfTIMEachDTIM = 4;
@@ -150,7 +151,7 @@ void calculateTScheduled(int startAID) {
             if(numOfDownlinkedDataEachNode[i])
                 numOfData += numOfDownlinkedDataEachNode[i];
         }
-        tScheduled[i] = (numOfData * dataSize) / 150000;
+        tScheduled[i] = (numOfData * dataSize * 8) / 150000;
         startAID += numOfSTAEachSlot;
     }
 }
@@ -227,6 +228,7 @@ bool ascending(int a, int b) {
 void slotAdjustmentPhase(int startAID) {
     calculateTScheduled(startAID);
     calculateTRemaining();
+
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         if(tRemaining[i] < 0)
             deficitSlots.push_back(i);
@@ -238,6 +240,91 @@ void slotAdjustmentPhase(int startAID) {
     sort(surplusSlots.begin(), surplusSlots.end(), descending);
 
     slotAdjustmentAlgo();
+}
+
+
+int findMinSTSWithUplinkedData(int startAID) {
+    int min = INT_MAX;
+    int result = -1;
+    for(int i = startAID; i < startAID + numOfSTAEachSlot - 1; i++) {
+        if(numOfClaimedUplinkedDataEachNode[i] && uplinkedDataTimeStamp[i] < min) {
+            min = uplinkedDataTimeStamp[i];
+            result = i;
+        }
+    }
+
+    return result;
+} 
+
+int findMinSTSWithDownlinkedData(int startAID) {
+    int min = INT_MAX;
+    int result = -1;
+    for(int i = startAID; i < startAID + numOfSTAEachSlot - 1; i++) {
+        if(numOfDownlinkedDataEachNode[i] && downlinkedDataTimeStamp[i] < min) {
+            min = downlinkedDataTimeStamp[i];
+            result = i;
+        }
+    }
+
+    return result;
+} 
+
+void transOfSTAWithUplinkedData(int startAID, int i) {
+    while(slots[i] && (findMinSTSWithUplinkedData(startAID) != -1)) {
+        int nextSTA = findMinSTSWithUplinkedData(startAID);
+
+        while(numOfClaimedUplinkedDataEachNode[nextSTA]) {
+            if(slots[i] >= transTimePerDataFrame) {
+                slots[i] -= transTimePerDataFrame;
+                numOfClaimedUplinkedDataEachNode[nextSTA]--;
+                nodes[nextSTA].aDataGetTransed();
+            } else {
+                slots[i] = 0;
+                break;
+            }
+        }
+
+        while(numOfDownlinkedDataEachNode[nextSTA]) {
+            if(slots[i] >= transTimePerDataFrame) {
+                slots[i] -= transTimePerDataFrame;
+                numOfDownlinkedDataEachNode[nextSTA]--;
+            } else {
+                slots[i] = 0;
+                break;
+            }
+        }
+
+        if(numOfDownlinkedDataEachNode[nextSTA] == 0)
+            downlinkedDataTimeStamp[nextSTA] = 0;
+    }
+}
+
+void transOfSTAWithOnlyDownlinkedData(int startAID, int i) {
+    while(slots[i] && (findMinSTSWithDownlinkedData(startAID) != -1)) {
+        int nextSTA = findMinSTSWithDownlinkedData(startAID);
+
+        while(numOfDownlinkedDataEachNode[nextSTA]) {
+            if(slots[i] >= transTimePerDataFrame) {
+                slots[i] -= transTimePerDataFrame;
+                numOfDownlinkedDataEachNode[nextSTA]--;
+            } else {
+                slots[i] = 0;
+                break;
+            }
+        }
+
+        if(numOfDownlinkedDataEachNode[nextSTA] == 0)
+            downlinkedDataTimeStamp[nextSTA] = 0;
+    }
+}
+
+void scheduledSubSlotTransPhase(int startAID) {
+    for(int i = 0; i < numOfSlotEachRAW; i++) {
+        transOfSTAWithUplinkedData(startAID, i);
+        transOfSTAWithOnlyDownlinkedData(startAID, i);
+
+        startAID += numOfSTAEachSlot;
+    }
 }
 
 void reset() {
@@ -270,7 +357,7 @@ int main(){
             for(int k = 0; k < numOfRAWEachTIM; k++) {
                 claimingPhase(startAID);
                 slotAdjustmentPhase(startAID);
-
+                scheduledSubSlotTransPhase(startAID);
                 startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
             }
         }

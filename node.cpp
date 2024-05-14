@@ -58,6 +58,10 @@ public:
         return numOfUplinkedData;
     }
 
+    void aDataGetTransed() {
+        numOfUplinkedData--;
+    }
+
     int getBackoffCounter() {
         return backoffCounter;
     }
