@@ -25,13 +25,16 @@ public:
         uplinkedProbability = probability;
     }
 
+    void setNumOfUplinkedData(int num) {
+        numOfUplinkedData = num;
+    }
+
     void generateBackoffCounter() {
-        srand(time(0));
         backoffCounter = rand() % 32;
     }
 
     void generateUplinkedData() {
-        srand( time(NULL) );
+        // srand( time(NULL) );
 
         /* «ü©w¶Ã¼Æ½d³ò */
         int min = 1;
@@ -39,7 +42,7 @@ public:
         
         int x;
 
-        for(int j = 0; j < 5; j++) {
+        for(int j = 0; j < 3; j++) {
             x = rand() % (max - min + 1) + min;
             if(x < uplinkedProbability)
                 numOfUplinkedData++;
@@ -47,7 +50,8 @@ public:
     }
 
     void backoffCountDown() {
-        backoffCounter--;   
+        if(backoffCounter > 0)
+            backoffCounter--;   
     }
 
     void setUplinkedProbability(double probability) {
@@ -70,7 +74,7 @@ public:
         return aid;
     }
 
-    bool isTransmitting() {
+    bool isBackoffCounterZero() {
         if(backoffCounter == 0)
             return true;
         else
