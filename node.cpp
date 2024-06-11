@@ -11,6 +11,8 @@ using namespace std;
 
 class Node {
 private:
+    bool isAwake = false;
+    double AwakingTime = 0;
     int aid;
     int backoffCounter;
     const int minContentionWindow = 32;
@@ -23,6 +25,24 @@ public:
     Node(int id, int probability) {
         aid = id;
         uplinkedProbability = probability;
+    }
+
+    void wakingUp() {
+        isAwake = true;
+    }
+
+    void isAwaking(double time) {
+        if(isAwake)
+            AwakingTime += time;
+    }
+
+    void fallAsleep(double time) {
+        isAwake = false;
+        AwakingTime += time;
+    }
+
+    double getAwakingTime() {
+        return AwakingTime;
     }
 
     void setNumOfUplinkedData(int num) {

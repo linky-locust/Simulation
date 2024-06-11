@@ -4,18 +4,19 @@
 
 using namespace std;
 
-const int numOfNode = 512; // 設定有幾個node
+const int numOfNode = 88; // 設定有幾個node
 const double downlinkedProbability = 10;
 const double uplinkedProbability = 30;
 const double dataSize = 64; // bytes
-const double dataRate = 150000;
+const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
-const double countDownTimeSlice = 0.000052; // 52us
+double Tclaiming = 0.02; // s (20ms)
+const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 4;
-const int numOfTIMEachDTIM = 4;
-const int numOfRAWEachTIM = 4;
+const int numOfTIMEachDTIM = 1;
+const int numOfRAWEachTIM = 1;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -37,10 +38,9 @@ set<int> claimed;
 int numOfClaimedSTA[numOfSlotEachRAW];
 
 int totalPayloadSize;
-int TimeStamp;
-int TimeStamp;
-int numOfDownlinkedDataEachNode[numOfNode];
-int numOfClaimedUplinkedDataEachNode[numOfNode];
+int TimeStamp = 1;
+int numOfDownlinkedDataFrame[numOfNode];
+int numOfClaimedUplinkedDataFrame[numOfNode];
 int downlinkedDataTimeStamp[numOfNode];
 int uplinkedDataTimeStamp[numOfNode];
 
@@ -48,14 +48,12 @@ vector<Node> nodes;
 
 void init() {
     totalPayloadSize = 0;
-    TimeStamp = 1;
-    TimeStamp = 1;
 
     for(int i = 0; i < numOfNode; i++) {
         downlinkedDataTimeStamp[i] = 0;
         uplinkedDataTimeStamp[i] = 0;
-        numOfDownlinkedDataEachNode[i] = 0;
-        numOfClaimedUplinkedDataEachNode[i] = 0;
+        numOfDownlinkedDataFrame[i] = 0;
+        numOfClaimedUplinkedDataFrame[i] = 0;
     }
 
     for(int i = 0; i < numOfSlotEachRAW; i++) {
@@ -70,7 +68,7 @@ void init() {
 void recordTimeStamp(int AID) {
     uplinkedDataTimeStamp[AID] = TimeStamp;
     // 這邊同時記錄成功claim的STA有幾個uplinked data frame
-    numOfClaimedUplinkedDataEachNode[AID] = nodes[AID].getNumOfUplinkedData();
+    numOfClaimedUplinkedDataFrame[AID] = nodes[AID].getNumOfUplinkedData();
     claimed.insert(AID);
     TimeStamp++;
 
@@ -97,7 +95,7 @@ void generateDownlinkedData() {
                 downlinkedDataTimeStamp[i] = TimeStamp;
                 TimeStamp++;
             }
-            numOfDownlinkedDataEachNode[i]++;
+            numOfDownlinkedDataFrame[i]++;
         }
 
         // for(int j = 0; j < 2; j++) {
@@ -126,7 +124,8 @@ void backoffCounterCountDown(int start) {
 
 void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
-        for(int j = 0; j < 32; j++) {
+        double Tclaim = Tclaiming;
+        while(Tclaim > 0) {
             bool mightCollision = false, collision = false;   
             int temp;
             //Check is there any STA whose backoff counter equals 0
@@ -151,9 +150,10 @@ void claimingPhase(int startAID) {
                 } else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(temp);
                     numOfClaimedSTA[i]++;
-                    j--;
                 }
             }
+
+            Tclaim -= miniSlot;
         }
 
         startAID += numOfSTAEachSlot;
@@ -165,11 +165,11 @@ void calculateTScheduled(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         numOfData = 0;
         for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-            if(numOfClaimedUplinkedDataEachNode[j])
-                numOfData += numOfClaimedUplinkedDataEachNode[j];
+            if(numOfClaimedUplinkedDataFrame[j])
+                numOfData += numOfClaimedUplinkedDataFrame[j];
 
-            if(numOfDownlinkedDataEachNode[j])
-                numOfData += numOfDownlinkedDataEachNode[j];
+            if(numOfDownlinkedDataFrame[j])
+                numOfData += numOfDownlinkedDataFrame[j];
         }
         tScheduled[i] = (numOfData * dataSize * 8) / 150000;
         startAID += numOfSTAEachSlot;
@@ -277,8 +277,8 @@ int findMinSTSWithUplinkedData(int startAID) {
     int min = INT_MAX;
     int result = -1;
     for(int i = startAID; i < startAID + numOfSTAEachSlot; i++) {
-        if(numOfClaimedUplinkedDataEachNode[i]) {
-            if(numOfDownlinkedDataEachNode[i] && downlinkedDataTimeStamp[i] < min) {
+        if(numOfClaimedUplinkedDataFrame[i]) {
+            if(numOfDownlinkedDataFrame[i] && downlinkedDataTimeStamp[i] < min) {
                 min = downlinkedDataTimeStamp[i];
                 result = i;
             } else if(uplinkedDataTimeStamp[i] < min) {
@@ -295,7 +295,7 @@ int findMinSTSWithOnlyDownlinkedData(int startAID) {
     int min = INT_MAX;
     int result = -1;
     for(int i = startAID; i < startAID + numOfSTAEachSlot; i++) {
-        if(numOfDownlinkedDataEachNode[i] && downlinkedDataTimeStamp[i] < min) {
+        if(!numOfClaimedUplinkedDataFrame[i] && numOfDownlinkedDataFrame[i] && downlinkedDataTimeStamp[i] < min) {
             min = downlinkedDataTimeStamp[i];
             result = i;
         }
@@ -304,15 +304,18 @@ int findMinSTSWithOnlyDownlinkedData(int startAID) {
     return result;
 } 
 
-void transOfSTAWithClaimedUplinkedData(int startAID, int i) {
+void transOfSTAWithClaimedUplinkedData(int startAID, int i, double &time) {
     while(slots[i] && (findMinSTSWithUplinkedData(startAID) != -1)) {
         int nextSTA = findMinSTSWithUplinkedData(startAID);
-
-        while(numOfClaimedUplinkedDataEachNode[nextSTA]) {
+        while(numOfClaimedUplinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
                 slots[i] -= transTimePerDataFrame;
-                if(!--numOfClaimedUplinkedDataEachNode[nextSTA]) // 如果這是該node的最後一個uplinked data frame，reset time stamp
+                time += transTimePerDataFrame;
+                if(!--numOfClaimedUplinkedDataFrame[nextSTA]) { // 如果這是該node的最後一個uplinked data frame，reset time stamp
                     uplinkedDataTimeStamp[nextSTA] = 0;
+                    claimed.erase(nextSTA);
+                    numOfClaimedSTA[i]--;
+                }
                 nodes[nextSTA].aDataGetTransed();
                 numOfUplinkedDataTrans[DTIMRound][nextSTA]++;
             } else {
@@ -321,10 +324,12 @@ void transOfSTAWithClaimedUplinkedData(int startAID, int i) {
             }
         }
 
-        while(numOfDownlinkedDataEachNode[nextSTA]) {
+        while(numOfDownlinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
                 slots[i] -= transTimePerDataFrame;
-                numOfDownlinkedDataEachNode[nextSTA]--;
+                time += transTimePerDataFrame;
+                if(!--numOfDownlinkedDataFrame[nextSTA])
+                    downlinkedDataTimeStamp[nextSTA] = 0;
                 numOfDownlinkedDataTrans[DTIMRound][nextSTA]++;
             } else {
                 slots[i] = 0;
@@ -332,32 +337,34 @@ void transOfSTAWithClaimedUplinkedData(int startAID, int i) {
             }
         }
 
-        if(numOfDownlinkedDataEachNode[nextSTA] == 0)
-            downlinkedDataTimeStamp[nextSTA] = 0;
+        if(!numOfClaimedUplinkedDataFrame[nextSTA] && !numOfDownlinkedDataFrame[nextSTA])
+            nodes[nextSTA].fallAsleep(time);
+            
     }
 }
 
-void transOfSTAWithOnlyDownlinkedData(int startAID, int i) {
+void transOfSTAWithOnlyDownlinkedData(int startAID, int i, double &time) {
     while(slots[i] && (findMinSTSWithOnlyDownlinkedData(startAID) != -1)) {
         int nextSTA = findMinSTSWithOnlyDownlinkedData(startAID);
 
-        while(numOfDownlinkedDataEachNode[nextSTA]) {
+        while(numOfDownlinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
                 slots[i] -= transTimePerDataFrame;
-                numOfDownlinkedDataEachNode[nextSTA]--;
+                time += transTimePerDataFrame;
+                if(!--numOfDownlinkedDataFrame[nextSTA]) {
+                    downlinkedDataTimeStamp[nextSTA] = 0;
+                    nodes[nextSTA].fallAsleep(time);
+                }
                 numOfDownlinkedDataTrans[DTIMRound][nextSTA]++;
             } else {
                 slots[i] = 0;
                 break;
             }
         }
-
-        if(numOfDownlinkedDataEachNode[nextSTA] == 0)
-            downlinkedDataTimeStamp[nextSTA] = 0;
     }
 }
 
-void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> claimedFail) {
+void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> claimedFail, double &time) {
     while(slots[i] > 0) {
         bool mightCollision = false, collision = false;
         int temp;
@@ -377,17 +384,21 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
         if(!mightCollision) { // 如果沒有STA要發起傳輸
             backoffCounterCountDown(startAID);
             slots[i] -= miniSlot;
+            time += miniSlot;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounter(startAID);
                 slots[i] -= transTimePerDataFrame;
+                time += transTimePerDataFrame;
             } else { // 沒碰撞發生，STA發送uplinked data
                 while(claimedFail[temp]) {
                     if(slots[i] >= transTimePerDataFrame) {
                         slots[i] -= transTimePerDataFrame;
+                        time += transTimePerDataFrame;
                         nodes[temp].aDataGetTransed();
                         numOfUplinkedDataTrans[DTIMRound][temp]++;
-                        claimedFail[temp]--;
+                        if(!--claimedFail[temp])
+                            nodes[temp].fallAsleep(time);
                     } else {
                         slots[i] = 0;
                         break;
@@ -398,22 +409,32 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
     }
 }
 
-void transOfUnscheduledSTA(int startAID, int i) {
+void transOfUnscheduledSTA(int startAID, int i, double &time) {
     unordered_map<int, int> claimedFail;
     for(int i = startAID; i < startAID + numOfSTAEachSlot; i++) {
-        if(nodes[i].getNumOfUplinkedData() > numOfClaimedUplinkedDataEachNode[i]) {
+        if(nodes[i].getNumOfUplinkedData() > numOfClaimedUplinkedDataFrame[i]) {
             nodes[i].generateBackoffCounter();  
-            claimedFail[i] = nodes[i].getNumOfUplinkedData() - numOfClaimedUplinkedDataEachNode[i];
+            claimedFail[i] = nodes[i].getNumOfUplinkedData() - numOfClaimedUplinkedDataFrame[i];
         }
     }
-    contendInRemainingSubSlot(startAID, i, claimedFail);
+    contendInRemainingSubSlot(startAID, i, claimedFail, time);
 }
 
 void dataTransPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
-        transOfSTAWithClaimedUplinkedData(startAID, i);
-        transOfSTAWithOnlyDownlinkedData(startAID, i);
-        transOfUnscheduledSTA(startAID, i);
+        double time = 0;
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            if(claimed.count(j) || numOfDownlinkedDataFrame[j])
+                nodes[j].wakingUp();
+        }
+
+        transOfSTAWithClaimedUplinkedData(startAID, i, time);
+        transOfSTAWithOnlyDownlinkedData(startAID, i, time);
+        transOfUnscheduledSTA(startAID, i, time);
+
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) 
+            nodes[j].isAwaking(slotDuration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+
         startAID += numOfSTAEachSlot;
     }
 }
@@ -424,13 +445,13 @@ void resetSlotInfo() {
         tScheduled[i] = 0;
         tRemaining[i] = 0;
         haveCollision[i] = false;
-        numOfClaimedSTA[i] = 0;
+        // numOfClaimedSTA[i] = 0;
     }
 }
 
 void resetDTIMInfo() {
     for(int i = 0; i < numOfNode; i++) {
-        numOfClaimedUplinkedDataEachNode[i] = 0;
+        numOfClaimedUplinkedDataFrame[i] = 0;
         uplinkedDataTimeStamp[i] = 0;
     }
 
@@ -449,11 +470,11 @@ int main() {
     }
 
     for(int i = 0; i < numOfDTIM; i++) {
+        generateDownlinkedData();
         for(int j = 0; j < numOfNode; j++) {
             nodes[j].generateBackoffCounter();
             nodes[j].generateUplinkedData();
         }
-        generateDownlinkedData();
         TimeStamp = TimeStamp + 1;
         int startAID = 0;
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
@@ -465,14 +486,38 @@ int main() {
 
                 dataTransPhase(startAID); // 包含scheduled sub-slot和remaining sub-slot
 
-                startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
+                // startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
 
                 resetSlotInfo();
             }
         }
-        resetDTIMInfo();
+        // resetDTIMInfo();
         DTIMRound++;
     }
+
+    double temp = 0;
+    double th[numOfNode] = {0};
+    int sum = 0;
+    for(int i = 0; i < numOfNode; i++) {
+        int num = 0;
+        for(int j = 0; j < DTIMRound; j++) {
+            num += numOfUplinkedDataTrans[j][i];
+            num += numOfDownlinkedDataTrans[j][i];
+        }
+        num *= dataSize * 8;
+        if(nodes[i].getAwakingTime())
+            th[i] += (num / nodes[i].getAwakingTime());
+        sum += th[i];
+    }
+
+    cout << "Throughput: " << sum / numOfNode << endl;
+
+    // for(int i = 0; i < numOfNode; i++) {
+    //     cout << i << ": " << nodes[i].getAwakingTime() << endl;
+    //     temp += nodes[i].getAwakingTime();
+    // }
+
+    // cout << "Avg: " << temp / 4 / numOfNode << endl;
 
     cout << "finish" << endl;
 
