@@ -13,10 +13,12 @@ class Node {
 private:
     bool isAwake = false;
     double AwakingTime = 0;
+    int timesOfCollision = 0;
     int aid;
     int backoffCounter;
     const int minContentionWindow = 32;
-    int maxContentionWindow;
+    int currentContentionWindow = minContentionWindow;
+    int maxContentionWindow = 1024;
     int uplinkedProbability;
     int numOfUplinkedData = 0;
     int payloadSize = 128 * 8;  // 假設payload size為128bytes，轉換為位元
@@ -45,12 +47,29 @@ public:
         return AwakingTime;
     }
 
+    void collide() {
+        timesOfCollision++;
+    }
+
+    int getTimesOfCollision() {
+        return timesOfCollision;
+    }
+
     void setNumOfUplinkedData(int num) {
         numOfUplinkedData = num;
     }
 
     void generateBackoffCounter() {
-        backoffCounter = rand() % 32;
+        backoffCounter = rand() % currentContentionWindow;
+    }
+
+    void doubleCW() {
+        if(currentContentionWindow < maxContentionWindow)
+            currentContentionWindow *= 2;
+    }
+
+    void resetCW() {
+        currentContentionWindow = minContentionWindow;
     }
 
     void generateUplinkedData() {

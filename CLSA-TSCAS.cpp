@@ -4,13 +4,13 @@
 
 using namespace std;
 
-const int numOfNode = 88; // 設定有幾個node
-const double downlinkedProbability = 10;
+const int numOfNode = 32; // 設定有幾個node
+const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 64; // bytes
+const double dataSize = 256; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
-double Tclaiming = 0.02; // s (20ms)
+double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
@@ -23,9 +23,8 @@ const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / nu
 int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
-int adjusted = 0;
 
-const double DTIMDuration = 2.56; // 秒
+const double DTIMDuration = 0.6; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -43,6 +42,10 @@ int numOfDownlinkedDataFrame[numOfNode];
 int numOfClaimedUplinkedDataFrame[numOfNode];
 int downlinkedDataTimeStamp[numOfNode];
 int uplinkedDataTimeStamp[numOfNode];
+
+int timeOfAlgo = 0;
+int timeOfScheduled = 0;
+int timeOfUnscheduled = 0;
 
 vector<Node> nodes;
 
@@ -112,8 +115,19 @@ void generateDownlinkedData() {
 
 void generateNewBackoffCounter(int start) {
     for(int i = start; i < start + numOfSTAEachSlot; i++) {
-        if(nodes[i].isBackoffCounterZero() && nodes[i].getNumOfUplinkedData())
+        if(nodes[i].isBackoffCounterZero() && nodes[i].getNumOfUplinkedData() && !claimed.count(i)) {
+            nodes[i].collide();
             nodes[i].generateBackoffCounter();
+        }
+    }
+}
+
+void generateNewBackoffCounterInRemainingPhase(int start, unordered_map<int, int> claimedFail) {
+    for(int i = start; i < start + numOfSTAEachSlot; i++) {
+        if(nodes[i].isBackoffCounterZero() && claimedFail.count(i) && claimedFail[i]) {
+            nodes[i].collide();
+            nodes[i].generateBackoffCounter();
+        }
     }
 }
 
@@ -124,8 +138,8 @@ void backoffCounterCountDown(int start) {
 
 void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
-        double Tclaim = Tclaiming;
-        while(Tclaim > 0) {
+        double tClaim = tClaiming;
+        while(tClaim > 0) {
             bool mightCollision = false, collision = false;   
             int temp;
             //Check is there any STA whose backoff counter equals 0
@@ -153,7 +167,7 @@ void claimingPhase(int startAID) {
                 }
             }
 
-            Tclaim -= miniSlot;
+            tClaim -= miniSlot;
         }
 
         startAID += numOfSTAEachSlot;
@@ -182,7 +196,7 @@ void calculateTRemaining() {
 }
 
 void slotAdjustmentAlgo() {
-    adjusted++;
+    timeOfAlgo++;
     // Algo 1
     int id = 0, is = 0;
     while(id < deficitSlots.size() && is < surplusSlots.size()) {
@@ -309,6 +323,7 @@ void transOfSTAWithClaimedUplinkedData(int startAID, int i, double &time) {
         int nextSTA = findMinSTSWithUplinkedData(startAID);
         while(numOfClaimedUplinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
+                timeOfScheduled++;
                 slots[i] -= transTimePerDataFrame;
                 time += transTimePerDataFrame;
                 if(!--numOfClaimedUplinkedDataFrame[nextSTA]) { // 如果這是該node的最後一個uplinked data frame，reset time stamp
@@ -326,6 +341,7 @@ void transOfSTAWithClaimedUplinkedData(int startAID, int i, double &time) {
 
         while(numOfDownlinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
+                timeOfScheduled++;
                 slots[i] -= transTimePerDataFrame;
                 time += transTimePerDataFrame;
                 if(!--numOfDownlinkedDataFrame[nextSTA])
@@ -349,6 +365,7 @@ void transOfSTAWithOnlyDownlinkedData(int startAID, int i, double &time) {
 
         while(numOfDownlinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
+                timeOfScheduled++;
                 slots[i] -= transTimePerDataFrame;
                 time += transTimePerDataFrame;
                 if(!--numOfDownlinkedDataFrame[nextSTA]) {
@@ -387,12 +404,13 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
             time += miniSlot;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
-                generateNewBackoffCounter(startAID);
+                generateNewBackoffCounterInRemainingPhase(startAID, claimedFail);
                 slots[i] -= transTimePerDataFrame;
                 time += transTimePerDataFrame;
             } else { // 沒碰撞發生，STA發送uplinked data
                 while(claimedFail[temp]) {
                     if(slots[i] >= transTimePerDataFrame) {
+                        timeOfUnscheduled++;
                         slots[i] -= transTimePerDataFrame;
                         time += transTimePerDataFrame;
                         nodes[temp].aDataGetTransed();
@@ -468,7 +486,7 @@ int main() {
         Node node(i, uplinkedProbability);
         nodes.push_back(node);
     }
-
+    
     for(int i = 0; i < numOfDTIM; i++) {
         generateDownlinkedData();
         for(int j = 0; j < numOfNode; j++) {
@@ -512,12 +530,25 @@ int main() {
 
     cout << "Throughput: " << sum / numOfNode << endl;
 
-    // for(int i = 0; i < numOfNode; i++) {
-    //     cout << i << ": " << nodes[i].getAwakingTime() << endl;
-    //     temp += nodes[i].getAwakingTime();
-    // }
+    double totalColRate = 0;
+    for(int i = 0; i < numOfNode; i++) {
+        if(nodes[i].getAwakingTime())
+            totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getAwakingTime());
+    }
+    cout << "Collision Rate: " << totalColRate / numOfNode << endl;
 
-    // cout << "Avg: " << temp / 4 / numOfNode << endl;
+    cout << "Algo: " << timeOfAlgo << endl;
+
+    cout << "Scheduled: " << timeOfScheduled << endl;
+
+    cout << "Unscheduled: " << timeOfUnscheduled << endl;
+
+    for(int i = 0; i < numOfNode; i++) {
+        // cout << i << ": " << nodes[i].getAwakingTime() << endl;
+        temp += nodes[i].getAwakingTime();
+    }
+
+    cout << "Avg: " << temp / 4 / numOfNode << endl;
 
     cout << "finish" << endl;
 
