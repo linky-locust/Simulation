@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 32; // 設定有幾個node
+const int numOfNode = 64; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -145,6 +145,7 @@ void claimingPhase(int startAID) {
             //Check is there any STA whose backoff counter equals 0
             for(int k = startAID; k < startAID + numOfSTAEachSlot; k++) {
                 if(nodes[k].isBackoffCounterZero() && nodes[k].getNumOfUplinkedData() && !claimed.count(k)) {
+                    nodes[k].attemptToAccessChannel();
                     if(mightCollision) { // 發生碰撞
                         collision = true;
                         break;
@@ -321,6 +322,7 @@ int findMinSTSWithOnlyDownlinkedData(int startAID) {
 void transOfSTAWithClaimedUplinkedData(int startAID, int i, double &time) {
     while(slots[i] && (findMinSTSWithUplinkedData(startAID) != -1)) {
         int nextSTA = findMinSTSWithUplinkedData(startAID);
+        nodes[nextSTA].attemptToAccessChannel();
         while(numOfClaimedUplinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
                 timeOfScheduled++;
@@ -362,7 +364,7 @@ void transOfSTAWithClaimedUplinkedData(int startAID, int i, double &time) {
 void transOfSTAWithOnlyDownlinkedData(int startAID, int i, double &time) {
     while(slots[i] && (findMinSTSWithOnlyDownlinkedData(startAID) != -1)) {
         int nextSTA = findMinSTSWithOnlyDownlinkedData(startAID);
-
+        nodes[nextSTA].attemptToAccessChannel();
         while(numOfDownlinkedDataFrame[nextSTA]) {
             if(slots[i] >= transTimePerDataFrame) {
                 timeOfScheduled++;
@@ -388,6 +390,7 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
         //Check is there any STA whose backoff counter equals 0
         for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
             if(nodes[j].isBackoffCounterZero() && claimedFail.count(j) && claimedFail[j]) {
+                nodes[j].attemptToAccessChannel();
                 if(mightCollision){ // 發生碰撞
                     collision = true;
                     break;
@@ -532,8 +535,8 @@ int main() {
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
-        if(nodes[i].getAwakingTime())
-            totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getAwakingTime());
+        if(nodes[i].getTimesOfAttemptAccessChannel())
+            totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getTimesOfAttemptAccessChannel());
     }
     cout << "Collision Rate: " << totalColRate / numOfNode << endl;
 

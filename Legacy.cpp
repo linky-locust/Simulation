@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 32; // 設定有幾個node
+const int numOfNode = 64; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -23,7 +23,7 @@ const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / nu
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 0.62; // 秒
+const double DTIMDuration = 0.68; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -121,6 +121,7 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
         //Check is there any STA whose backoff counter equals 0
         for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
             if(nodes[j].isBackoffCounterZero() && (numOfUplinkedDataFrame[j] || numOfDownlinkedDataFrame[j])) {
+                nodes[j].attemptToAccessChannel();
                 if(mightCollision){ // 發生碰撞
                     collision = true;
                     break;
@@ -229,8 +230,8 @@ int main() {
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
-        if(nodes[i].getAwakingTime())
-            totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getAwakingTime());
+        if(nodes[i].getTimesOfAttemptAccessChannel())
+            totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getTimesOfAttemptAccessChannel());
     }
     cout << "Collision Rate: " << totalColRate / numOfNode << endl;
 

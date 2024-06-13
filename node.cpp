@@ -13,7 +13,8 @@ class Node {
 private:
     bool isAwake = false;
     double AwakingTime = 0;
-    int timesOfCollision = 0;
+    double timesOfCollision = 0;
+    double timesOfAttemptAccessChannel = 0;
     int aid;
     int backoffCounter;
     const int minContentionWindow = 32;
@@ -43,6 +44,14 @@ public:
         AwakingTime += time;
     }
 
+    void attemptToAccessChannel() {
+        timesOfAttemptAccessChannel++;
+    }
+
+    double getTimesOfAttemptAccessChannel() {
+        return timesOfAttemptAccessChannel;
+    }
+
     double getAwakingTime() {
         return AwakingTime;
     }
@@ -51,7 +60,7 @@ public:
         timesOfCollision++;
     }
 
-    int getTimesOfCollision() {
+    double getTimesOfCollision() {
         return timesOfCollision;
     }
 
