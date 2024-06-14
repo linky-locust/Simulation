@@ -17,11 +17,13 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 const int numOfDTIM = 4;
 const int numOfTIMEachDTIM = 1;
 const int numOfRAWEachTIM = 1;
-const int numOfSlotEachRAW = 4;
+const int numOfSlotEachRAW = 2;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
+
+double accumulatedTime = 0;
 
 const double DTIMDuration = 0.68; // ¬í
 double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
@@ -171,9 +173,12 @@ void dynamicPolicy() {
     for(int i = 0; i < numOfNode; i++) 
         temp += nodes[i].getAwakingTime();
 
-    delay = temp / (DTIMRound + 1) / numOfNode;
+    delay = temp - accumulatedTime;
+    delay /= numOfNode;
     if(delay > delayRestriction)
         slotDuration += slotDuration;
+
+    accumulatedTime = temp;
 }
 
 void resetDTIMInfo() {
