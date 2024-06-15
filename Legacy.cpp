@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 64; // 設定有幾個node
+const int numOfNode = 196; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -15,15 +15,15 @@ const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 4;
-const int numOfTIMEachDTIM = 1;
-const int numOfRAWEachTIM = 1;
+const int numOfTIMEachDTIM = 2;
+const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 0.68; // 秒
+const double DTIMDuration = 3.84; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -225,6 +225,8 @@ int main() {
             th[i] += (num / nodes[i].getAwakingTime());
         sum += th[i];
     }
+    
+    cout << "Sum: " << sum << endl;
 
     cout << "Throughput: " << sum / numOfNode << endl;
 

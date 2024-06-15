@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 64; // 設定有幾個node
+const int numOfNode = 136; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -15,8 +15,8 @@ const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 4;
-const int numOfTIMEachDTIM = 1;
-const int numOfRAWEachTIM = 1;
+const int numOfTIMEachDTIM = 2;
+const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -24,7 +24,7 @@ int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 0.6; // 秒
+const double DTIMDuration = 3.84; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -135,6 +135,11 @@ void backoffCounterCountDown(int start) {
 void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         double tClaim = tClaiming;
+        double time = 0;
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            if(nodes[j].getNumOfUplinkedData() && !claimed.count(j))
+                nodes[j].wakingUp();
+        }
         while(tClaim > 0) {
             bool mightCollision = false, collision = false;   
             int temp;
@@ -157,13 +162,17 @@ void claimingPhase(int startAID) {
             else {
                 if(collision) //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
-                else // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                else {// 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(temp);
+                    nodes[temp].fallAsleep(time);
+                }
             }
 
             tClaim -= miniSlot;
+            time += miniSlot;
         }
-
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
+            nodes[j].isAwaking(time);
         startAID += numOfSTAEachSlot;
     }
 }
@@ -463,7 +472,7 @@ int main() {
 
                 dataTransPhase(startAID); // 包含scheduled sub-slot和remaining sub-slot
 
-                // startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
+                startAID += (numOfSTAEachSlot * numOfSlotEachRAW);
 
                 resetSlotInfo();
             }

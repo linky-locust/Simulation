@@ -4,8 +4,8 @@
 
 using namespace std;
 
-const int numOfNode = 64; // 設定有幾個node
-const double delayRestriction = 0.14; // s (500ms)
+const int numOfNode = 196; // 設定有幾個node
+const double delayRestriction = 0.048; // s (500ms)
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -15,18 +15,21 @@ double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 const int numOfDTIM = 4;
-const int numOfTIMEachDTIM = 1;
-const int numOfRAWEachTIM = 1;
-const int numOfSlotEachRAW = 2;
+const int numOfTIMEachDTIM = 2;
+const int numOfRAWEachTIM = 2;
+const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
+int timesOfDP = 0;
+
 double accumulatedTime = 0;
 
-const double DTIMDuration = 0.68; // 秒
-double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+const double DTIMDuration = 3.84; // 秒
+const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+double RAWslotDuration[numOfRAWEachTIM] = {slotDuration, slotDuration};
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -168,15 +171,17 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
     }
 }
 
-void dynamicPolicy() {
+void dynamicPolicy(int k) {
     double temp = 0, delay = 0;
     for(int i = 0; i < numOfNode; i++) 
         temp += nodes[i].getAwakingTime();
 
     delay = temp - accumulatedTime;
     delay /= numOfNode;
-    if(delay > delayRestriction)
-        slotDuration += slotDuration;
+    if(delay > delayRestriction) {
+        timesOfDP++;
+        RAWslotDuration[k] += RAWslotDuration[k];
+    }
 
     accumulatedTime = temp;
 }
@@ -217,14 +222,14 @@ int main() {
                     wakeSTAsUp(startAID);
                     contendInRemainingSubSlot(startAID, l, time);
                     for(int m = startAID; m < startAID + numOfSTAEachSlot; m++) 
-                        nodes[m].isAwaking(slotDuration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+                        nodes[m].isAwaking(RAWslotDuration[k]); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
 
                     startAID += numOfSTAEachSlot;
-                    slots[l] = slotDuration;
+                    slots[l] = RAWslotDuration[k];
                 }
+                dynamicPolicy(k);
             }
         }
-        dynamicPolicy();
         // resetDTIMInfo();
         DTIMRound++;
     }
@@ -258,9 +263,11 @@ int main() {
         temp += nodes[i].getAwakingTime();
     }
 
-    cout << "Avg: " << temp / 4 / numOfNode << endl;
+    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
 
-    cout << "slotDuration: " << slotDuration << endl;
+    // cout << "slotDuration: " << slotDuration << endl;
+
+    cout << "TimesOfDP: " << timesOfDP << endl;
 
     cout << "finish" << endl;
 
