@@ -4,10 +4,10 @@
 
 using namespace std;
 
-const int numOfNode = 196; // 設定有幾個node
+const int numOfNode = 464; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 256; // bytes
+const double dataSize = 160; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -69,26 +69,55 @@ void init() {
     }
 }
 
-void generateDownlinkedData() {
-    // srand( time(NULL) );
+void generateUplinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
+    int zero = 0, one = 0, two = 0, three = 0;
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 3); // 确保封包?量不超?3
 
-    /* 指定亂數範圍 */
-    int min = 1;
-    int max = 100;
+        nodes[i].setNumOfUplinkedData(nodes[i].getNumOfUplinkedData() + packets);
 
-    int x;
-
-    for(int i = 0; i < numOfNode; i++) {
-        x = rand() % (max - min + 1) + min;
-        if(x < downlinkedProbability) {
-            numOfDownlinkedDataFrame[i]++;
+        switch (packets)
+        {
+        case 0:
+            zero++;
+            break;
+        case 1:
+            one++;
+            break;
+        case 2:
+            two++;
+            break;
+        case 3:
+            three++;
+            break;
+        default:
+            break;
         }
+    }
+}
 
-        // for(int j = 0; j < 2; j++) {
-        //     x = rand() % (max - min + 1) + min;
-        //     if(x < downlinkedProbability)
-        //         numOfDownlinkedDataEachNode[i]++;
-        // }
+void generateDownlinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
+
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 1); // 确保封包?量不超?3
+
+        if(packets && downlinkedDataTimeStamp[i] == 0) {
+            downlinkedDataTimeStamp[i] = TimeStamp;
+            TimeStamp++;
+            numOfDownlinkedDataFrame[i] += packets;
+        }
     }
 }
 
@@ -187,11 +216,11 @@ int main() {
     }
     
     for(int i = 0; i < numOfDTIM; i++) {
-        generateDownlinkedData();
+        generateDownlinkedData(0.7); // 根據Poisson Distribution產生doenlinked data frame，lambda為0.7
+        generateUplinkedData(0.5); // 根據Poisson Distribution產生uplinked data frame，lambda為0.5
         for(int j = 0; j < numOfNode; j++) {
             nodes[j].resetCW();
             nodes[j].generateBackoffCounter();
-            nodes[j].generateUplinkedData();
             numOfUplinkedDataFrame[j] = nodes[j].getNumOfUplinkedData();
         }
         int startAID = 0;

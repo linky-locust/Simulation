@@ -4,11 +4,11 @@
 
 using namespace std;
 
-const int numOfNode = 196; // 設定有幾個node
-const double delayRestriction = 0.048; // s (500ms)
+const int numOfNode = 464; // 設定有幾個node
+const double delayRestriction = 0.0438; // s (500ms)
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 256; // bytes
+const double dataSize = 160; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -29,7 +29,7 @@ double accumulatedTime = 0;
 
 const double DTIMDuration = 3.84; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
-double RAWslotDuration[numOfRAWEachTIM] = {slotDuration, slotDuration};
+double RAWslotDuration[numOfTIMEachDTIM][numOfRAWEachTIM];
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -72,28 +72,61 @@ void init() {
         haveCollision[i] = false;
         numOfClaimedSTA[i] = 0;
     }
+
+    for(int i = 0; i < numOfTIMEachDTIM; i++)
+        for(int j = 0; j < numOfRAWEachTIM; j++)
+            RAWslotDuration[i][j] = slotDuration;
 }
 
-void generateDownlinkedData() {
-    // srand( time(NULL) );
+void generateUplinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
+    int zero = 0, one = 0, two = 0, three = 0;
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 3); // 确保封包?量不超?3
 
-    /* 指定亂數範圍 */
-    int min = 1;
-    int max = 100;
+        nodes[i].setNumOfUplinkedData(nodes[i].getNumOfUplinkedData() + packets);
 
-    int x;
-
-    for(int i = 0; i < numOfNode; i++) {
-        x = rand() % (max - min + 1) + min;
-        if(x < downlinkedProbability) {
-            numOfDownlinkedDataFrame[i]++;
+        switch (packets)
+        {
+        case 0:
+            zero++;
+            break;
+        case 1:
+            one++;
+            break;
+        case 2:
+            two++;
+            break;
+        case 3:
+            three++;
+            break;
+        default:
+            break;
         }
+    }
+}
 
-        // for(int j = 0; j < 2; j++) {
-        //     x = rand() % (max - min + 1) + min;
-        //     if(x < downlinkedProbability)
-        //         numOfDownlinkedDataEachNode[i]++;
-        // }
+void generateDownlinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
+
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 1); // 确保封包?量不超?3
+
+        if(packets && downlinkedDataTimeStamp[i] == 0) {
+            downlinkedDataTimeStamp[i] = TimeStamp;
+            TimeStamp++;
+            numOfDownlinkedDataFrame[i] += packets;
+        }
     }
 }
 
@@ -171,7 +204,7 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
     }
 }
 
-void dynamicPolicy(int k) {
+void dynamicPolicy(int j, int k) {
     double temp = 0, delay = 0;
     for(int i = 0; i < numOfNode; i++) 
         temp += nodes[i].getAwakingTime();
@@ -180,7 +213,7 @@ void dynamicPolicy(int k) {
     delay /= numOfNode;
     if(delay > delayRestriction) {
         timesOfDP++;
-        RAWslotDuration[k] += RAWslotDuration[k];
+        RAWslotDuration[j][k] += RAWslotDuration[j][k];
     }
 
     accumulatedTime = temp;
@@ -207,11 +240,11 @@ int main() {
     }
     
     for(int i = 0; i < numOfDTIM; i++) {
-        generateDownlinkedData();
+        generateDownlinkedData(0.7); // 根據Poisson Distribution產生doenlinked data frame，lambda為0.7
+        generateUplinkedData(0.5); // 根據Poisson Distribution產生uplinked data frame，lambda為0.5
         for(int j = 0; j < numOfNode; j++) {
             nodes[j].resetCW();
             nodes[j].generateBackoffCounter();
-            nodes[j].generateUplinkedData();
             numOfUplinkedDataFrame[j] = nodes[j].getNumOfUplinkedData();
         }
         int startAID = 0;
@@ -222,12 +255,12 @@ int main() {
                     wakeSTAsUp(startAID);
                     contendInRemainingSubSlot(startAID, l, time);
                     for(int m = startAID; m < startAID + numOfSTAEachSlot; m++) 
-                        nodes[m].isAwaking(RAWslotDuration[k]); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+                        nodes[m].isAwaking(RAWslotDuration[j][k]); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
 
                     startAID += numOfSTAEachSlot;
-                    slots[l] = RAWslotDuration[k];
+                    slots[l] = RAWslotDuration[j][k];
                 }
-                dynamicPolicy(k);
+                dynamicPolicy(j, k);
             }
         }
         // resetDTIMInfo();

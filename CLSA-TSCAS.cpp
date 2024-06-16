@@ -4,10 +4,10 @@
 
 using namespace std;
 
-const int numOfNode = 20; // 設定有幾個node
+const int numOfNode = 464; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 256; // bytes
+const double dataSize = 160; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -68,6 +68,39 @@ void init() {
     }
 }
 
+void generateUplinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
+    int zero = 0, one = 0, two = 0, three = 0;
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 3); // 确保封包?量不超?3
+
+        nodes[i].setNumOfUplinkedData(nodes[i].getNumOfUplinkedData() + packets);
+
+        switch (packets)
+        {
+        case 0:
+            zero++;
+            break;
+        case 1:
+            one++;
+            break;
+        case 2:
+            two++;
+            break;
+        case 3:
+            three++;
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 void recordTimeStamp(int AID) {
     uplinkedDataTimeStamp[AID] = TimeStamp;
     // 這邊同時記錄成功claim的STA有幾個uplinked data frame
@@ -82,30 +115,22 @@ void clearUplinkedDataTimeStamp(int aid) {
     uplinkedDataTimeStamp[aid] = 0;
 }
 
-void generateDownlinkedData() {
-    // srand( time(NULL) );
+void generateDownlinkedData(double lambda) {
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // 初始化用於Poisson Distribution的seed
+    default_random_engine generator(seed);
+    poisson_distribution<int> distribution(lambda);
 
-    /* 指定亂數範圍 */
-    int min = 1;
-    int max = 100;
+    for (int i = 0; i < numOfNode; i++) {
+        int packets;
+        do {
+            packets = distribution(generator);
+        } while (packets > 1); // 确保封包?量不超?3
 
-    int x;
-
-    for(int i = 0; i < numOfNode; i++) {
-        x = rand() % (max - min + 1) + min;
-        if(x < downlinkedProbability) {
-            if(downlinkedDataTimeStamp[i] == 0) {
-                downlinkedDataTimeStamp[i] = TimeStamp;
-                TimeStamp++;
-            }
-            numOfDownlinkedDataFrame[i]++;
+        if(packets && downlinkedDataTimeStamp[i] == 0) {
+            downlinkedDataTimeStamp[i] = TimeStamp;
+            TimeStamp++;
+            numOfDownlinkedDataFrame[i] += packets;
         }
-
-        // for(int j = 0; j < 2; j++) {
-        //     x = rand() % (max - min + 1) + min;
-        //     if(x < downlinkedProbability)
-        //         numOfDownlinkedDataEachNode[i]++;
-        // }
     }
 }
 
@@ -489,7 +514,7 @@ void resetDTIMInfo() {
 
 int main() {
     srand(time(0));
-
+    
     init();
 
     // Create nodes
@@ -499,12 +524,12 @@ int main() {
     }
     
     for(int i = 0; i < numOfDTIM; i++) {
-        generateDownlinkedData();
+        generateDownlinkedData(0.7); // 根據Poisson Distribution產生doenlinked data frame，lambda為0.7
+        generateUplinkedData(0.5); // 根據Poisson Distribution產生uplinked data frame，lambda為0.5
         for(int j = 0; j < numOfNode; j++) {
             nodes[j].generateBackoffCounter();
-            nodes[j].generateUplinkedData();
+            // nodes[j].generateUplinkedData();
         }
-        TimeStamp = TimeStamp + 1;
         int startAID = 0;
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
