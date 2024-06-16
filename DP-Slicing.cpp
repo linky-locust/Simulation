@@ -14,11 +14,13 @@ const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
-const int numOfDTIM = 4;
+const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
 const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+double awakingTimeOfRAW[numOfNode] = {0};
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
@@ -121,12 +123,6 @@ void generateDownlinkedData(double lambda) {
         do {
             packets = distribution(generator);
         } while (packets > 1); // 确保封包?量不超?3
-
-        if(packets && downlinkedDataTimeStamp[i] == 0) {
-            downlinkedDataTimeStamp[i] = TimeStamp;
-            TimeStamp++;
-            numOfDownlinkedDataFrame[i] += packets;
-        }
     }
 }
 
@@ -192,8 +188,10 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
                         } else
                             numOfDownlinkedDataFrame[temp]--;
                         
-                        if(!numOfUplinkedDataFrame[temp] && !numOfDownlinkedDataFrame[temp])
+                        if(!numOfUplinkedDataFrame[temp] && !numOfDownlinkedDataFrame[temp]) {
                             nodes[temp].fallAsleep(time);
+                            awakingTimeOfRAW[temp] += time;
+                        }
                     } else {
                         slots[i] = 0;
                         break;
@@ -207,11 +205,12 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
 void dynamicPolicy(int j, int k) {
     double temp = 0, delay = 0;
     for(int i = 0; i < numOfNode; i++) 
-        temp += nodes[i].getAwakingTime();
+        delay += awakingTimeOfRAW[i];
 
-    delay = temp - accumulatedTime;
-    delay /= numOfNode;
+    // delay = temp - accumulatedTime;
+    delay /= (numOfSlotEachRAW * numOfSTAEachSlot);
     if(delay > delayRestriction) {
+        // delayRestriction *= 2;
         timesOfDP++;
         RAWslotDuration[j][k] += RAWslotDuration[j][k];
     }
@@ -261,6 +260,8 @@ int main() {
                     slots[l] = RAWslotDuration[j][k];
                 }
                 dynamicPolicy(j, k);
+                for(int l = 0; l < numOfNode; l++)
+                    awakingTimeOfRAW[l] = 0;
             }
         }
         // resetDTIMInfo();

@@ -14,7 +14,7 @@ double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
-const int numOfDTIM = 4;
+const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
 const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
@@ -273,7 +273,7 @@ int main() {
         temp += nodes[i].getAwakingTime();
     }
 
-    cout << "Avg: " << temp / 4 / numOfNode << endl;
+    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
 
     cout << "finish" << endl;
 

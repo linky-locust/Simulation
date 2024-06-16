@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 464; // 設定有幾個node
+const int numOfNode = 400; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 160; // bytes
@@ -14,7 +14,7 @@ double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
-const int numOfDTIM = 4;
+const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
 const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
@@ -24,7 +24,7 @@ int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 3.84; // 秒
+const double DTIMDuration = 3.52; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -186,7 +186,7 @@ void claimingPhase(int startAID) {
             else {
                 if(collision) //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
-                else {// 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
+                else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(temp);
                     nodes[temp].fallAsleep(time);
                 }
@@ -439,12 +439,18 @@ void dataTransPhase(int startAID) {
                 nodes[j].wakingUp();
         }
 
+        double duration = slots[i];
+
         transOfSTAWithClaimedUplinkedData(startAID, i, time);
         transOfSTAWithOnlyDownlinkedData(startAID, i, time);
         transOfUnscheduledSTA(startAID, i, time);
 
-        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) 
-            nodes[j].isAwaking(slotDuration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            nodes[j].isAwaking(duration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+            if(nodes[j].eyesOpen()) {
+                int a = 0;
+            }
+        }
 
         startAID += numOfSTAEachSlot;
     }
@@ -509,17 +515,21 @@ int main() {
     double temp = 0;
     double th[numOfNode] = {0};
     int sum = 0;
+    int haha = 0;
     for(int i = 0; i < numOfNode; i++) {
         int num = 0;
         for(int j = 0; j < DTIMRound; j++) {
             num += numOfUplinkedDataTrans[j][i];
             num += numOfDownlinkedDataTrans[j][i];
         }
+        haha += num;
         num *= dataSize * 8;
         if(nodes[i].getAwakingTime())
             th[i] += (num / nodes[i].getAwakingTime());
         sum += th[i];
     }
+
+    cout << "Total Trans Frame: " << haha << endl;   
 
     cout << "Throughput: " << sum / numOfNode << endl;
 
@@ -541,7 +551,7 @@ int main() {
         temp += nodes[i].getAwakingTime();
     }
 
-    cout << "Avg: " << temp / 4 / numOfNode << endl;
+    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
 
     cout << "finish" << endl;
 

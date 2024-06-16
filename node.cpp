@@ -39,6 +39,10 @@ public:
             AwakingTime += time;
     }
 
+    bool eyesOpen() {
+        return isAwake;
+    }
+
     void fallAsleep(double time) {
         isAwake = false;
         AwakingTime += time;
