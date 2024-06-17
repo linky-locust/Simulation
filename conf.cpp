@@ -4,10 +4,10 @@
 
 using namespace std;
 
-const int numOfNode = 400; // 設定有幾個node
+const int numOfNode = 1024; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 160; // bytes
+const double dataSize = 64; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -20,11 +20,13 @@ const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
+const double ClaimingSlotTimeEachDTIM = tClaiming * numOfSlotEachRAW * numOfRAWEachTIM * numOfTIMEachDTIM;
+
 int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 3.52; // 秒
+const double DTIMDuration = 2.24; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -123,12 +125,13 @@ void generateDownlinkedData(double lambda) {
         int packets;
         do {
             packets = distribution(generator);
-        } while (packets > 1); // 确保封包?量不超?3
+        } while (packets > 1);
 
+        numOfDownlinkedDataFrame[i] += packets;
+        
         if(packets && downlinkedDataTimeStamp[i] == 0) {
             downlinkedDataTimeStamp[i] = TimeStamp;
             TimeStamp++;
-            numOfDownlinkedDataFrame[i] += packets;
         }
     }
 }
@@ -161,7 +164,7 @@ void claimingPhase(int startAID) {
         double tClaim = tClaiming;
         double time = 0;
         for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-            if(nodes[j].getNumOfUplinkedData() && !claimed.count(j))
+            if(nodes[j].getNumOfUplinkedData())
                 nodes[j].wakingUp();
         }
         while(tClaim > 0) {
@@ -173,7 +176,6 @@ void claimingPhase(int startAID) {
                     nodes[k].attemptToAccessChannel();
                     if(mightCollision) { // 發生碰撞
                         collision = true;
-                        break;
                     } else {
                         mightCollision = true;
                         temp = k;
@@ -374,7 +376,7 @@ void transOfSTAWithOnlyDownlinkedData(int startAID, int i, double &time) {
 }
 
 void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> claimedFail, double &time) {
-    while(slots[i] > 0) {
+    while(slots[i] > 0 && slots[i] >= miniSlot) {
         bool mightCollision = false, collision = false;
         int temp;
         //Check is there any STA whose backoff counter equals 0
@@ -383,7 +385,6 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
                 nodes[j].attemptToAccessChannel();
                 if(mightCollision){ // 發生碰撞
                     collision = true;
-                    break;
                 } else {
                     mightCollision = true;
                     temp = j;
@@ -398,8 +399,13 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounterInRemainingPhase(startAID, claimedFail);
-                slots[i] -= transTimePerDataFrame;
-                time += transTimePerDataFrame;
+                if(slots[i] >= transTimePerDataFrame) {
+                    slots[i] -= transTimePerDataFrame;
+                    time += transTimePerDataFrame;
+                } else {
+                    time += slots[i];
+                    slots[i] = 0;
+                }
             } else { // 沒碰撞發生，STA發送uplinked data
                 while(claimedFail[temp]) {
                     if(slots[i] >= transTimePerDataFrame) {
@@ -411,6 +417,7 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
                         if(!--claimedFail[temp])
                             nodes[temp].fallAsleep(time);
                     } else {
+                        time += slots[i];
                         slots[i] = 0;
                         break;
                     }
@@ -475,6 +482,22 @@ void resetDTIMInfo() {
     claimed.clear();
 }
 
+// 函?用于??据追加到 CSV 文件
+void appendToCSV(const std::string& filename, double value) {
+    std::ofstream file;
+    // 以追加模式打?文件
+    file.open(filename, std::ios::app);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open file." << std::endl;
+        return;
+    }
+
+    // ??据?入文件，每次?入一?新行
+    file << value << "\n";
+
+    file.close();
+}
+
 int main() {
     srand(time(0));
 
@@ -515,23 +538,29 @@ int main() {
     double temp = 0;
     double th[numOfNode] = {0};
     int sum = 0;
-    int haha = 0;
+    int totalTransDataFrame = 0;
     for(int i = 0; i < numOfNode; i++) {
         int num = 0;
         for(int j = 0; j < DTIMRound; j++) {
             num += numOfUplinkedDataTrans[j][i];
             num += numOfDownlinkedDataTrans[j][i];
         }
-        haha += num;
+        totalTransDataFrame += num;
         num *= dataSize * 8;
         if(nodes[i].getAwakingTime())
             th[i] += (num / nodes[i].getAwakingTime());
         sum += th[i];
     }
 
-    cout << "Total Trans Frame: " << haha << endl;   
+    cout << "Total Trans Frame: " << totalTransDataFrame << endl;   
+
+    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / ((DTIMDuration + ClaimingSlotTimeEachDTIM) * numOfDTIM) << endl;
+
+    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / ((DTIMDuration + ClaimingSlotTimeEachDTIM) * numOfDTIM));
 
     cout << "Throughput: " << sum / numOfNode << endl;
+
+    appendToCSV("Throughput.csv", sum / numOfNode);
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
@@ -539,6 +568,8 @@ int main() {
             totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getTimesOfAttemptAccessChannel());
     }
     cout << "Collision Rate: " << totalColRate / numOfNode << endl;
+
+    appendToCSV("Collision.csv", totalColRate / numOfNode);
 
     cout << "Algo: " << timeOfAlgo << endl;
 
@@ -551,7 +582,11 @@ int main() {
         temp += nodes[i].getAwakingTime();
     }
 
+    cout << "Total Time: " << temp << endl;
+
     cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
+
+    appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
 
     cout << "finish" << endl;
 
