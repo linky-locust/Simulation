@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 1024; // 設定有幾個node
+const int numOfNode = 512; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 64; // bytes
@@ -16,7 +16,7 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 2;
+const int numOfRAWEachTIM = 32;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -28,6 +28,8 @@ int DTIMRound = 0;
 
 const double DTIMDuration = 2.24; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+const double trueDTIMDuration = 2.56;
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -163,10 +165,10 @@ void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         double tClaim = tClaiming;
         double time = 0;
-        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-            if(nodes[j].getNumOfUplinkedData())
-                nodes[j].wakingUp();
-        }
+        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+        //     if(nodes[j].getNumOfUplinkedData())
+        //         nodes[j].wakingUp();
+        // }
         while(tClaim > 0) {
             bool mightCollision = false, collision = false;   
             int temp;
@@ -190,15 +192,15 @@ void claimingPhase(int startAID) {
                     generateNewBackoffCounter(startAID);
                 else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(temp);
-                    nodes[temp].fallAsleep(time);
+                    // nodes[temp].fallAsleep(time);
                 }
             }
 
             tClaim -= miniSlot;
             time += miniSlot;
         }
-        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
-            nodes[j].isAwaking(time);
+        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
+        //     nodes[j].isAwaking(time);
         startAID += numOfSTAEachSlot;
     }
 }
@@ -554,9 +556,9 @@ int main() {
 
     cout << "Total Trans Frame: " << totalTransDataFrame << endl;   
 
-    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / ((DTIMDuration + ClaimingSlotTimeEachDTIM) * numOfDTIM) << endl;
+    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM) << endl;
 
-    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / ((DTIMDuration + ClaimingSlotTimeEachDTIM) * numOfDTIM));
+    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM));
 
     cout << "Throughput: " << sum / numOfNode << endl;
 

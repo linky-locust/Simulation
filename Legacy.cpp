@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 512; // 設定有幾個node
+const int numOfNode = 1024; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 64; // bytes
@@ -16,7 +16,7 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 16;
+const int numOfRAWEachTIM = 32;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 

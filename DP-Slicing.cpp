@@ -4,8 +4,8 @@
 
 using namespace std;
 
-const int numOfNode = 1024; // 設定有幾個node
-const double restriction = 0.047;
+const int numOfNode = 512; // 設定有幾個node
+const double restriction = 0.023;
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 64; // bytes
@@ -16,7 +16,7 @@ const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 2;
+const int numOfRAWEachTIM = 32;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -226,7 +226,7 @@ void dynamicPolicy(int j, int k) {
     // delay = temp - accumulatedTime;
     delay /= (numOfSlotEachRAW * numOfSTAEachSlot);
     if(delay > delayRestriction[j][k]) {
-        delayRestriction[j][k] = (delay + delayRestriction[j][k]) / 2;
+        // delayRestriction[j][k] = (delay + delayRestriction[j][k]) / 2;
         timesOfDP++;
         RAWslotDuration[j][k] += RAWslotDuration[j][k];
     }
