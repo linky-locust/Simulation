@@ -4,26 +4,27 @@
 
 using namespace std;
 
-const int numOfNode = 1024; // 設定有幾個node
+const int numOfNode = 512; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 64; // bytes
+const double dataSize = 256; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
-double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 32;
+const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 2.56; // 秒
+int timesOfEyeOpen = 0;
+
+const double DTIMDuration = 3.84; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
 double slots[numOfSlotEachRAW];
@@ -159,8 +160,8 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
 
         if(!mightCollision) { // 如果沒有STA要發起傳輸
             backoffCounterCountDown(startAID);
-            slots[i] -= miniSlot;
-            time += miniSlot;
+            slots[i] -= countDownTimeSlice;
+            // time += countDownTimeSlice;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounter(startAID);
@@ -248,8 +249,11 @@ int main() {
                     double time = 0;
                     wakeSTAsUp(startAID);
                     contendInRemainingSubSlot(startAID, l, time);
-                    for(int m = startAID; m < startAID + numOfSTAEachSlot; m++) 
+                    for(int m = startAID; m < startAID + numOfSTAEachSlot; m++) {
                         nodes[m].isAwaking(slotDuration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+                        if(nodes[m].eyesOpen())
+                            timesOfEyeOpen++;
+                    }
 
                     startAID += numOfSTAEachSlot;
                     slots[l] = slotDuration;
@@ -282,11 +286,13 @@ int main() {
 
     appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (DTIMDuration * numOfDTIM));
     
-    cout << "Sum: " << sum << endl;
+    // cout << "Sum: " << sum << endl;
 
-    cout << "Throughput: " << sum / numOfNode << endl;
+    // cout << "Throughput: " << sum / numOfNode << endl;
 
-    appendToCSV("Throughput.csv", sum / numOfNode);
+    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / (DTIMDuration * numOfDTIM) << endl;
+
+    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / (DTIMDuration * numOfDTIM));
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
@@ -310,7 +316,9 @@ int main() {
 
     appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
 
-    cout << "finish" << endl;
+    // cout << "finish" << endl;
+
+    cout << "Times of Eye Open: " << timesOfEyeOpen << endl;
 
     return 0;
 }

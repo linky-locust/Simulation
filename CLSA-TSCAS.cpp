@@ -7,7 +7,7 @@ using namespace std;
 const int numOfNode = 512; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 64; // bytes
+const double dataSize = 256; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -16,7 +16,7 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 32;
+const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -26,10 +26,10 @@ int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 2.24; // s
+const double DTIMDuration = 3.52; // s
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
-const double trueDTIMDuration = 2.56;
+const double trueDTIMDuration = 3.84;
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -39,6 +39,8 @@ vector<int> surplusSlots;
 vector<int> deficitSlots;
 set<int> claimed;
 int numOfClaimedSTA[numOfSlotEachRAW];
+
+int timesOfEyeOpen = 0;
 
 int totalPayloadSize;
 int TimeStamp = 1;
@@ -174,7 +176,7 @@ void claimingPhase(int startAID) {
         //     if(nodes[j].getNumOfUplinkedData() && !claimed.count(j))
         //         nodes[j].wakingUp();
         // }
-        while(tClaim > 0) {
+        while(tClaim > 0 && tClaim >= countDownTimeSlice) {
             bool mightCollision = false, collision = false;   
             int temp;
             //Check is there any STA whose backoff counter equals 0
@@ -190,9 +192,11 @@ void claimingPhase(int startAID) {
                 }
             }
 
-            if(!mightCollision) // 如果沒有STA要發起傳輸
+            if(!mightCollision) {// 如果沒有STA要發起傳輸
                 backoffCounterCountDown(startAID);
-            else {
+                tClaim -= countDownTimeSlice;
+                // time += countDownTimeSlice;
+            } else {
                 if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
                     haveCollision[i] = true;
@@ -201,13 +205,15 @@ void claimingPhase(int startAID) {
                     recordTimeStamp(temp);
                     numOfClaimedSTA[i]++;
                 }
+                tClaim -= miniSlot;
+                time += miniSlot;
             }
-
-            tClaim -= miniSlot;
-            time += miniSlot;
         }
-        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
+        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
         //     nodes[j].isAwaking(time);
+        //     if(nodes[j].eyesOpen())
+        //         timesOfEyeOpen++;
+        // }
         startAID += numOfSTAEachSlot;
     }
 }
@@ -439,8 +445,8 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
 
         if(!mightCollision) { // 如果沒有STA要發起傳輸
             backoffCounterCountDown(startAID);
-            slots[i] -= miniSlot;
-            time += miniSlot;
+            slots[i] -= countDownTimeSlice;
+            time += countDownTimeSlice;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounterInRemainingPhase(startAID, claimedFail);
@@ -497,8 +503,11 @@ void dataTransPhase(int startAID) {
         transOfSTAWithOnlyDownlinkedData(startAID, i, time);
         transOfUnscheduledSTA(startAID, i, time);
 
-        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) 
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
             nodes[j].isAwaking(duration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
+            if(nodes[j].eyesOpen())
+                timesOfEyeOpen++;
+        }
 
         startAID += numOfSTAEachSlot;
     }
@@ -598,9 +607,11 @@ int main() {
     appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM));
     // cout << "Sum: " << sum << endl;
 
-    cout << "Throughput: " << sum / numOfNode << endl;
+    // cout << "Throughput: " << sum / numOfNode << endl;
 
-    appendToCSV("Throughput.csv", sum / numOfNode);
+    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / (trueDTIMDuration * numOfDTIM) << endl;
+
+    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / (trueDTIMDuration * numOfDTIM));
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
@@ -628,6 +639,7 @@ int main() {
 
     appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
 
+    cout << "Times of Eye Open: " << timesOfEyeOpen << endl;
     // cout << "finish" << endl;
 
     return 0;

@@ -169,7 +169,7 @@ void claimingPhase(int startAID) {
         //     if(nodes[j].getNumOfUplinkedData())
         //         nodes[j].wakingUp();
         // }
-        while(tClaim > 0) {
+        while(tClaim > 0 && tClaim >= countDownTimeSlice) {
             bool mightCollision = false, collision = false;   
             int temp;
             //Check is there any STA whose backoff counter equals 0
@@ -185,8 +185,10 @@ void claimingPhase(int startAID) {
                 }
             }
 
-            if(!mightCollision) // 如果沒有STA要發起傳輸
+            if(!mightCollision) { // 如果沒有STA要發起傳輸
                 backoffCounterCountDown(startAID);
+                tClaim -= countDownTimeSlice;
+            }
             else {
                 if(collision) //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
@@ -194,10 +196,9 @@ void claimingPhase(int startAID) {
                     recordTimeStamp(temp);
                     // nodes[temp].fallAsleep(time);
                 }
+                tClaim -= miniSlot;
+                time += miniSlot;   
             }
-
-            tClaim -= miniSlot;
-            time += miniSlot;
         }
         // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
         //     nodes[j].isAwaking(time);
@@ -396,8 +397,8 @@ void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> clai
 
         if(!mightCollision) { // 如果沒有STA要發起傳輸
             backoffCounterCountDown(startAID);
-            slots[i] -= miniSlot;
-            time += miniSlot;
+            slots[i] -= countDownTimeSlice;
+            time += countDownTimeSlice;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounterInRemainingPhase(startAID, claimedFail);
@@ -560,9 +561,11 @@ int main() {
 
     appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM));
 
-    cout << "Throughput: " << sum / numOfNode << endl;
+    // cout << "Throughput: " << sum / numOfNode << endl;
 
-    appendToCSV("Throughput.csv", sum / numOfNode);
+    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / (trueDTIMDuration * numOfDTIM) << endl;
+
+    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / (trueDTIMDuration * numOfDTIM));
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {

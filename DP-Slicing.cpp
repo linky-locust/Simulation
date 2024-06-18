@@ -178,8 +178,8 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
 
         if(!mightCollision) { // 如果沒有STA要發起傳輸
             backoffCounterCountDown(startAID);
-            slots[i] -= miniSlot;
-            time += miniSlot;
+            slots[i] -= countDownTimeSlice;
+            time += countDownTimeSlice;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounter(startAID);
@@ -335,9 +335,11 @@ int main() {
 
     appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / du);
 
-    cout << "Throughput: " << sum / numOfNode << endl;
+    // cout << "Throughput: " << sum / numOfNode << endl;
 
-    appendToCSV("Throughput.csv", sum / numOfNode);
+    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / du << endl;
+
+    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / du);
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {
