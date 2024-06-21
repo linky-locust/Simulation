@@ -4,7 +4,7 @@
 
 using namespace std;
 
-const int numOfNode = 512; // 設定有幾個node
+const int numOfNode = 192; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
 const double dataSize = 256; // bytes
@@ -83,7 +83,7 @@ void generateUplinkedData(double lambda) {
         int packets;
         do {
             packets = distribution(generator);
-        } while (packets > 3); // 确保封包?量不超?3
+        } while (packets > 3);
 
         nodes[i].setNumOfUplinkedData(nodes[i].getNumOfUplinkedData() + packets);
 
@@ -172,10 +172,10 @@ void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         double tClaim = tClaiming;
         double time = 0;
-        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-        //     if(nodes[j].getNumOfUplinkedData() && !claimed.count(j))
-        //         nodes[j].wakingUp();
-        // }
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            if(nodes[j].getNumOfUplinkedData() && !claimed.count(j))
+                nodes[j].wakingUp();
+        }
         while(tClaim > 0 && tClaim >= countDownTimeSlice) {
             bool mightCollision = false, collision = false;   
             int temp;
@@ -195,13 +195,13 @@ void claimingPhase(int startAID) {
             if(!mightCollision) {// 如果沒有STA要發起傳輸
                 backoffCounterCountDown(startAID);
                 tClaim -= countDownTimeSlice;
-                // time += countDownTimeSlice;
+                time += countDownTimeSlice;
             } else {
                 if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                     generateNewBackoffCounter(startAID);
                     haveCollision[i] = true;
                 } else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
-                    // nodes[temp].fallAsleep(time);
+                    nodes[temp].fallAsleep(time);
                     recordTimeStamp(temp);
                     numOfClaimedSTA[i]++;
                 }
@@ -209,11 +209,12 @@ void claimingPhase(int startAID) {
                 time += miniSlot;
             }
         }
-        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-        //     nodes[j].isAwaking(time);
-        //     if(nodes[j].eyesOpen())
-        //         timesOfEyeOpen++;
-        // }
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            if(!claimed.count(j))
+                nodes[j].isAwaking(time);
+            // if(nodes[j].eyesOpen())
+            //     timesOfEyeOpen++;
+        }
         startAID += numOfSTAEachSlot;
     }
 }
@@ -635,9 +636,9 @@ int main() {
 
     cout << "Total Time: " << temp << endl;
 
-    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
+    cout << "Avg: " << temp / numOfNode << endl;
 
-    appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
+    appendToCSV("Transmission.csv", temp / numOfNode);
 
     cout << "Times of Eye Open: " << timesOfEyeOpen << endl;
     // cout << "finish" << endl;

@@ -310,11 +310,11 @@ int main() {
         temp += nodes[i].getAwakingTime();
     }
 
-    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
+    cout << "Avg: " << temp / numOfNode << endl;
 
     cout << "Total Time: " << temp << endl;
 
-    appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
+    appendToCSV("Transmission.csv", temp / numOfNode);
 
     // cout << "finish" << endl;
 

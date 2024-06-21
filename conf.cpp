@@ -7,7 +7,7 @@ using namespace std;
 const int numOfNode = 512; // 設定有幾個node
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 64; // bytes
+const double dataSize = 256; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0005; // 0.5ms
 double tClaiming = 0.02; // s (20ms)
@@ -16,7 +16,7 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
-const int numOfRAWEachTIM = 32;
+const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
@@ -26,10 +26,10 @@ int numOfUplinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int numOfDownlinkedDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
 
-const double DTIMDuration = 2.24; // 秒
+const double DTIMDuration = 3.52; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
 
-const double trueDTIMDuration = 2.56;
+const double trueDTIMDuration = 3.84;
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -165,10 +165,10 @@ void claimingPhase(int startAID) {
     for(int i = 0; i < numOfSlotEachRAW; i++) {
         double tClaim = tClaiming;
         double time = 0;
-        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
-        //     if(nodes[j].getNumOfUplinkedData())
-        //         nodes[j].wakingUp();
-        // }
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            if(nodes[j].getNumOfUplinkedData())
+                nodes[j].wakingUp();
+        }
         while(tClaim > 0 && tClaim >= countDownTimeSlice) {
             bool mightCollision = false, collision = false;   
             int temp;
@@ -194,14 +194,14 @@ void claimingPhase(int startAID) {
                     generateNewBackoffCounter(startAID);
                 else { // 沒碰撞發生，紀錄claim成功的STA的time stamp和claim的data frame數量
                     recordTimeStamp(temp);
-                    // nodes[temp].fallAsleep(time);
+                    nodes[temp].fallAsleep(time);
                 }
                 tClaim -= miniSlot;
                 time += miniSlot;   
             }
         }
-        // for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
-        //     nodes[j].isAwaking(time);
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
+            nodes[j].isAwaking(time);
         startAID += numOfSTAEachSlot;
     }
 }
@@ -485,17 +485,14 @@ void resetDTIMInfo() {
     claimed.clear();
 }
 
-// 函?用于??据追加到 CSV 文件
 void appendToCSV(const std::string& filename, double value) {
     std::ofstream file;
-    // 以追加模式打?文件
     file.open(filename, std::ios::app);
     if (!file.is_open()) {
         std::cerr << "Failed to open file." << std::endl;
         return;
     }
 
-    // ??据?入文件，每次?入一?新行
     file << value << "\n";
 
     file.close();
@@ -589,9 +586,9 @@ int main() {
 
     cout << "Total Time: " << temp << endl;
 
-    cout << "Avg: " << temp / numOfDTIM / numOfNode << endl;
+    cout << "Avg: " << temp / numOfNode << endl;
 
-    appendToCSV("Transmission.csv", temp / numOfDTIM / numOfNode);
+    appendToCSV("Transmission.csv", temp / numOfNode);
 
     cout << "finish" << endl;
 
