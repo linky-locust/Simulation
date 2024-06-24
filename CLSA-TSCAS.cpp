@@ -4,12 +4,16 @@
 
 using namespace std;
 
-const int numOfNode = 192; // 設定有幾個node
+const int numOfNode = 448; // 設定有幾個node
+const int maxNumOfDownlinkedDataFrame = 1;
+const int maxNumOfUplinkedDataFrame = 3;
+const int lambdaOfDownlinkedDataFrame = 1;
+const int lambdaOfUplinkedDataFrame = 2;
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 256; // bytes
+const double dataSize = 100; // bytes
 const double dataRate = 150000; // bps
-const double miniSlot = 0.0005; // 0.5ms
+const double miniSlot = 0.0002; // 0.2ms
 double tClaiming = 0.02; // s (20ms)
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
@@ -83,7 +87,7 @@ void generateUplinkedData(double lambda) {
         int packets;
         do {
             packets = distribution(generator);
-        } while (packets > 3);
+        } while (packets > maxNumOfUplinkedDataFrame);
 
         nodes[i].setNumOfUplinkedData(nodes[i].getNumOfUplinkedData() + packets);
 
@@ -130,7 +134,7 @@ void generateDownlinkedData(double lambda) {
         int packets;
         do {
             packets = distribution(generator);
-        } while (packets > 1);
+        } while (packets > maxNumOfDownlinkedDataFrame);
 
         numOfDownlinkedDataFrame[i] += packets;
         
@@ -428,7 +432,7 @@ void transOfSTAWithOnlyDownlinkedData(int startAID, int i, double &time) {
 }
 
 void contendInRemainingSubSlot(int startAID, int i, unordered_map<int, int> claimedFail, double &time) {
-    while(slots[i] > 0 && slots[i] >= miniSlot) {
+    while(slots[i] > 0 && slots[i] >= countDownTimeSlice) {
         bool mightCollision = false, collision = false;
         int temp;
         //Check is there any STA whose backoff counter equals 0
@@ -559,8 +563,8 @@ int main() {
     }
     
     for(int i = 0; i < numOfDTIM; i++) {
-        generateDownlinkedData(0.7); // 根據Poisson Distribution產生doenlinked data frame，lambda為0.7
-        generateUplinkedData(0.5); // 根據Poisson Distribution產生uplinked data frame，lambda為0.5
+        generateDownlinkedData(lambdaOfDownlinkedDataFrame); // 根據Poisson Distribution產生doenlinked data frame，lambda為0.7
+        generateUplinkedData(lambdaOfUplinkedDataFrame); // 根據Poisson Distribution產生uplinked data frame，lambda為0.5
         for(int j = 0; j < numOfNode; j++) {
             nodes[j].generateBackoffCounter();
             // nodes[j].generateUplinkedData();
