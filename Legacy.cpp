@@ -4,14 +4,14 @@
 
 using namespace std;
 
-const int numOfNode = 320; // 設定有幾個node
+const int numOfNode = 384; // 設定有幾個node
 const int maxNumOfDownlinkedDataFrame = 1;
 const int maxNumOfUplinkedDataFrame = 3;
 const int lambdaOfDownlinkedDataFrame = 1;
 const int lambdaOfUplinkedDataFrame = 2;
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 100; // bytes
+const double dataSize = 128; // bytes
 const double dataRate = 150000; // bps
 const double countDownTimeSlice = 0.000052; // s (52us)
 const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
@@ -168,8 +168,8 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
                 generateNewBackoffCounter(startAID);
                 if(slots[i] >= transTimePerDataFrame) {
-                    slots[i] -= transTimePerDataFrame;
-                    time += transTimePerDataFrame;
+                    slots[i] -= (2 * transTimePerDataFrame);
+                    time += (2 * transTimePerDataFrame);
                 } else {
                     time += slots[i];
                     slots[i] = 0;
