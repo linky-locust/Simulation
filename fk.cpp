@@ -4,10 +4,10 @@
 
 using namespace std;
 
-const int numOfNode = 576; // 設定有幾個node
-const int maxNumOfDownlinkedDataFrame = 1;
-const int maxNumOfUplinkedDataFrame = 3;
-const int lambdaOfDownlinkedDataFrame = 0.5;
+const int numOfNode = 512; // 設定有幾個node
+const int maxNumOfDownlinkedDataFrame = 3;
+const int maxNumOfUplinkedDataFrame = 1;
+const int lambdaOfDownlinkedDataFrame = 1;
 const int lambdaOfUplinkedDataFrame = 1;
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
@@ -19,12 +19,8 @@ const double transTimePerDataFrame = ((dataSize * 8) / dataRate);
 const int numOfDTIM = 10;
 const int numOfTIMEachDTIM = 2;
 const int numOfRAWEachTIM = 2;
-const int numOfSlotEachRAW = 4;
+const int numOfSlotEachRAW = 64;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
-
-
-double slotUsage = 0;
-double totalSlotUsage = 0;
 
 int numOfDataTrans[numOfDTIM][numOfNode] = {0};
 int DTIMRound = 0;
@@ -33,6 +29,11 @@ int timesOfEyeOpen = 0;
 
 const double DTIMDuration = 3.84; // 秒
 const double slotDuration = DTIMDuration / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+int numOfCollision[numOfTIMEachDTIM][numOfRAWEachTIM][numOfSlotEachRAW] = {0};
+double slotDurationForRecord[numOfDTIM][numOfTIMEachDTIM][numOfRAWEachTIM][numOfSlotEachRAW];
+bool shouldPlus[numOfTIMEachDTIM][numOfRAWEachTIM][numOfSlotEachRAW] = {false};
+bool shouldMinus[numOfTIMEachDTIM][numOfRAWEachTIM][numOfSlotEachRAW] = {false};
 
 double slots[numOfSlotEachRAW];
 double tScheduled[numOfSlotEachRAW];
@@ -147,7 +148,7 @@ void wakeSTAsUp(int startAID) {
     }
 }
 
-void contendInRemainingSubSlot(int startAID, int i, double &time) {
+void contendInRemainingSubSlot(int startAID, int i, double &time, int &col) {
     while(slots[i] > 0 && slots[i] >= countDownTimeSlice) {
         bool mightCollision = false, collision = false;
         int temp;
@@ -170,10 +171,11 @@ void contendInRemainingSubSlot(int startAID, int i, double &time) {
             time += countDownTimeSlice;
         } else {
             if(collision) { //　如果有碰撞發生，則重骰發生碰撞的STAs的backoff counter
+                col++;
                 generateNewBackoffCounter(startAID);
                 if(slots[i] >= transTimePerDataFrame) {
-                    slots[i] -= (2 * transTimePerDataFrame);
-                    time += (2 * transTimePerDataFrame);
+                    slots[i] -= (1.5 * transTimePerDataFrame);
+                    time += (1.5 * transTimePerDataFrame);
                 } else {
                     time += slots[i];
                     slots[i] = 0;
@@ -234,6 +236,12 @@ int main() {
 
     init();
 
+    for(int i = 0; i < numOfDTIM; i++)
+        for(int j = 0; j < numOfTIMEachDTIM; j++)
+            for(int k = 0; k < numOfRAWEachTIM; k++)
+                for(int l = 0; l < numOfSlotEachRAW; l++)
+                    slotDurationForRecord[i][j][k][l] = slotDuration;
+
     // Create nodes
     for(int i = 0; i < numOfNode; i++) {
         Node node(i, uplinkedProbability);
@@ -252,33 +260,44 @@ int main() {
         for(int j = 0; j < numOfTIMEachDTIM; j++) {
             for(int k = 0; k < numOfRAWEachTIM; k++) {
                 for(int l = 0; l < numOfSlotEachRAW; l++) {
+                    int col = 0;
                     double time = 0;
                     wakeSTAsUp(startAID);
-                    contendInRemainingSubSlot(startAID, l, time);
+
+                    if(shouldMinus[j][k][l] && !shouldPlus[j][k][l])
+                        slotDurationForRecord[i][j][k][l] -= 0.1;
+                    else if(!shouldMinus[j][k][l] && shouldPlus[j][k][l])
+                        slotDurationForRecord[i][j][k][l] += 0.1;
+
+                    slots[l] = slotDurationForRecord[i][j][k][l];
+
+                    contendInRemainingSubSlot(startAID, l, time, col);
                     for(int m = startAID; m < startAID + numOfSTAEachSlot; m++) {
                         nodes[m].isAwaking(slotDuration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
                         if(nodes[m].eyesOpen())
                             timesOfEyeOpen++;
                     }
 
-                    double temp = 0;
+                    if(i > 0) {
+                        if(col > numOfCollision[j][k][l]) {
+                            shouldPlus[j][k][l] = true;
+                            shouldMinus[j][k][l] = false;
+                        } else if(col < numOfCollision[j][k][l]) {
+                            shouldPlus[j][k][l] = false;
+                            shouldMinus[j][k][l] = true;
+                        } else {
+                            shouldPlus[j][k][l] = false;
+                            shouldMinus[j][k][l] = false;
+                        }
+                    } 
 
-                    for(int j = startAID; j < startAID + numOfSTAEachSlot; j++)
-                        temp += numOfDataTrans[DTIMRound][j];
-
-                    temp *= transTimePerDataFrame;
-
-                    slotUsage += (temp / (slotDuration));
+                    numOfCollision[j][k][l] = col;
 
                     startAID += numOfSTAEachSlot;
                     slots[l] = slotDuration;
                 }
             }
         }
-
-        totalSlotUsage += (slotUsage / (numOfTIMEachDTIM * numOfRAWEachTIM * numOfSlotEachRAW));
-        slotUsage = 0;
-
         // resetDTIMInfo();
         DTIMRound++;
     }
@@ -299,21 +318,28 @@ int main() {
         sum += th[i];
     }
 
-    cout << "Total Trans Frame: " << totalTransDataFrame << endl;   
+    double totalDTIMTime = 0;
+    for(int i = 0; i < numOfDTIM; i++)
+        for(int j = 0; j < numOfTIMEachDTIM; j++)
+            for(int k = 0; k < numOfRAWEachTIM; k++)
+                for(int l = 0; l < numOfSlotEachRAW; l++)
+                    totalDTIMTime += slotDurationForRecord[i][j][k][l];
 
-    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / (DTIMDuration * numOfDTIM) << endl;
-    
-    cout << "Channel Utilization2: " << totalSlotUsage / numOfDTIM << endl;
+    cout << "Total Trans Frame: " << totalTransDataFrame << endl; 
 
-    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (DTIMDuration * numOfDTIM));
+    cout << "Total DTIM time: " << totalDTIMTime << endl;
+
+    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime << endl;
+
+    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime);
     
     // cout << "Sum: " << sum << endl;
 
     // cout << "Throughput: " << sum / numOfNode << endl;
 
-    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / (DTIMDuration * numOfDTIM) << endl;
+    cout << "Throughput: " << (totalTransDataFrame * dataSize * 8) / totalDTIMTime << endl;
 
-    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / (DTIMDuration * numOfDTIM));
+    appendToCSV("Throughput.csv", (totalTransDataFrame * dataSize * 8) / totalDTIMTime);
 
     double totalColRate = 0;
     for(int i = 0; i < numOfNode; i++) {

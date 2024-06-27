@@ -4,14 +4,14 @@
 
 using namespace std;
 
-const int numOfNode = 448; // 設定有幾個node
+const int numOfNode = 576; // 設定有幾個node
 const int maxNumOfDownlinkedDataFrame = 1;
 const int maxNumOfUplinkedDataFrame = 3;
-const int lambdaOfDownlinkedDataFrame = 1;
-const int lambdaOfUplinkedDataFrame = 2;
+const int lambdaOfDownlinkedDataFrame = 0.5;
+const int lambdaOfUplinkedDataFrame = 1;
 const double downlinkedProbability = 30;
 const double uplinkedProbability = 30;
-const double dataSize = 100; // bytes
+const double dataSize = 128; // bytes
 const double dataRate = 150000; // bps
 const double miniSlot = 0.0002; // 0.2ms
 double tClaiming = 0.02; // s (20ms)
@@ -23,6 +23,9 @@ const int numOfTIMEachDTIM = 2;
 const int numOfRAWEachTIM = 2;
 const int numOfSlotEachRAW = 4;
 const int numOfSTAEachSlot = numOfNode / numOfTIMEachDTIM / numOfRAWEachTIM / numOfSlotEachRAW;
+
+double slotUsage = 0;
+double totalSlotUsage = 0;
 
 const double ClaimingSlotTimeEachDTIM = tClaiming * numOfSlotEachRAW * numOfRAWEachTIM * numOfTIMEachDTIM;
 
@@ -508,6 +511,17 @@ void dataTransPhase(int startAID) {
         transOfSTAWithOnlyDownlinkedData(startAID, i, time);
         transOfUnscheduledSTA(startAID, i, time);
 
+        double temp = 0;
+
+        for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
+            temp += numOfUplinkedDataTrans[DTIMRound][j];
+            temp += numOfDownlinkedDataTrans[DTIMRound][j];
+        }
+
+        temp *= transTimePerDataFrame;
+
+        slotUsage += (temp / (duration + tClaiming));
+
         for(int j = startAID; j < startAID + numOfSTAEachSlot; j++) {
             nodes[j].isAwaking(duration); // 判斷是否有未完成channel access的STA，如果有，把slot duration算進這些STA的transmission time
             if(nodes[j].eyesOpen())
@@ -584,6 +598,8 @@ int main() {
                 resetSlotInfo();
             }
         }
+        totalSlotUsage += (slotUsage / (numOfTIMEachDTIM * numOfRAWEachTIM * numOfSlotEachRAW));
+        slotUsage = 0;
         // resetDTIMInfo();
         DTIMRound++;
     }
@@ -608,6 +624,8 @@ int main() {
     cout << "Total Trans Frame: " << totalTransDataFrame << endl;
 
     cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM) << endl;
+
+    cout << "Channel Utilization2: " << totalSlotUsage / numOfDTIM << endl;
 
     appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / (trueDTIMDuration * numOfDTIM));
     // cout << "Sum: " << sum << endl;
