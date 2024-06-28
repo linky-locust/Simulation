@@ -329,9 +329,9 @@ int main() {
 
     cout << "Total DTIM time: " << totalDTIMTime << endl;
 
-    cout << "Channel Utilization: " << (totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime << endl;
+    cout << "Channel Utilization: " << ((totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime) * 100 << endl;
 
-    appendToCSV("CU.csv", (totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime);
+    appendToCSV("CU.csv", ((totalTransDataFrame * transTimePerDataFrame) / totalDTIMTime) * 100);
     
     // cout << "Sum: " << sum << endl;
 
@@ -346,9 +346,9 @@ int main() {
         if(nodes[i].getTimesOfAttemptAccessChannel())
             totalColRate += (nodes[i].getTimesOfCollision() / nodes[i].getTimesOfAttemptAccessChannel());
     }
-    cout << "Collision Rate: " << totalColRate / numOfNode << endl;
+    cout << "Collision Rate: " << (totalColRate / numOfNode) * 100 << endl;
 
-    appendToCSV("Collision.csv", totalColRate / numOfNode);
+    appendToCSV("Collision.csv", (totalColRate / numOfNode) * 100);
 
     cout << "Unscheduled: " << timeOfUnscheduled << endl;
 
